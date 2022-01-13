@@ -6,22 +6,23 @@ use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader};
 
 #[wasm_bindgen(start)]
 pub fn main() {
-    let document = web_sys::window()
-        .expect("no global `window` exists")
-        .document()
-        .expect("no `document` exists");
-    let canvas = document.get_element_by_id("adel")
-        .expect("no element named `adel` exists")
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .expect("`adel` element is not a canvas");
-    
-    let context = canvas
-        .get_context("webgl2")
-        .expect("failed to get webgl2 context")
-        .expect("failed to get webgl2 context")
-        .dyn_into::<WebGl2RenderingContext>()
-        .unwrap();
+    let context = get_context();
+    let draw_triangle = make_draw_triangle(&context);
 
+    let cb = make_callback(move |cb, time_ms| {
+        let time = time_ms / 1e3;
+        context.clear_color(0.0, 0.0, 0.0, 1.0);
+        context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+
+        draw_triangle(time);
+
+        request_animation_frame(cb);
+    });
+
+    request_animation_frame(&cb);
+}
+
+fn make_draw_triangle(context: &WebGl2RenderingContext) -> impl Fn(f64) {
     let vert_shader = compile_shader(
         &context,
         WebGl2RenderingContext::VERTEX_SHADER,
@@ -37,7 +38,8 @@ pub fn main() {
             clip_pos = position;
         }
         "##,
-    ).expect("failed to compile vert_shader");
+    )
+    .expect("failed to compile vert_shader");
 
     let frag_shader = compile_shader(
         &context,
@@ -52,10 +54,11 @@ pub fn main() {
             outColor = vec4(clip_pos.xy * 0.5 + 0.5, 0.0, 1);
         }
         "##,
-    ).expect("failed to compile frag_shader");
+    )
+    .expect("failed to compile frag_shader");
 
-    let program = link_program(&context, &vert_shader, &frag_shader)
-        .expect("failed to link program");
+    let program =
+        link_program(&context, &vert_shader, &frag_shader).expect("failed to link program");
     context.use_program(Some(&program));
 
     let buffer = context.create_buffer().expect("failed to create buffer");
@@ -68,26 +71,40 @@ pub fn main() {
         WebGl2RenderingContext::STATIC_DRAW,
     );
 
-    let position_attribute_location = context.get_attrib_location(&program, "position");
-    context.vertex_attrib_pointer_with_i32(0, 2, WebGl2RenderingContext::FLOAT, false, 0, 0);
-    context.enable_vertex_attrib_array(position_attribute_location as u32);
+    let position_attribute_location = context.get_attrib_location(&program, "position") as u32;
+    context.vertex_attrib_pointer_with_i32(position_attribute_location, 2, WebGl2RenderingContext::FLOAT, false, 0, 0);
+    context.enable_vertex_attrib_array(position_attribute_location);
 
-    let rot_uniform_location = context.get_uniform_location(&program, "rot_vec")
+    let rot_uniform_location = context
+        .get_uniform_location(&program, "rot_vec")
         .expect("failed to get uniform location");
 
-    let cb = make_callback(move |cb, mut time| {
-        time /= 1e3;
-        context.clear_color(0.0, 0.0, 0.0, 1.0);
-        context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-
+    let context = context.clone();
+    move |time| {
         let vert_count = (vertices.len() / 2) as i32;
-        context.uniform2f(Some(&rot_uniform_location), time.cos() as f32, time.sin() as f32);
+        context.uniform2f(
+            Some(&rot_uniform_location),
+            time.cos() as f32,
+            time.sin() as f32,
+        );
         context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vert_count);
+    }
+}
 
-        request_animation_frame(cb);
-    });
-
-    request_animation_frame(&cb);
+fn get_context() -> WebGl2RenderingContext {
+    web_sys::window()
+        .expect("no global `window` exists")
+        .document()
+        .expect("no `document` exists")
+        .get_element_by_id("space_game")
+        .expect("no element named `space_game` exists")
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .expect("`space_game` element is not a canvas")
+        .get_context("webgl2")
+        .expect("failed to get webgl2 context")
+        .expect("failed to get webgl2 context")
+        .dyn_into::<WebGl2RenderingContext>()
+        .unwrap()
 }
 
 type Callback = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
@@ -156,4 +173,3 @@ fn link_program(
             .unwrap_or_else(|| String::from("Unknown error creating program object")))
     }
 }
-
