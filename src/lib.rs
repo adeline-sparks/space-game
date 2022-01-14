@@ -1,20 +1,31 @@
 use std::{cell::RefCell, rc::Rc};
 
+use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader};
 
 #[wasm_bindgen(start)]
 pub fn main() {
+    console_error_panic_hook::set_once();
+
     let context = get_context();
-    let draw_triangle = make_draw_triangle(&context);
+    let draw_quad = make_draw_quad(&context);
 
     let cb = make_callback(move |cb, time_ms| {
         let time = time_ms / 1e3;
         context.clear_color(0.0, 0.0, 0.0, 1.0);
         context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
 
-        draw_triangle(time);
+        let canvas = context
+            .canvas()
+            .unwrap()
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .unwrap();
+        context.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
+
+        let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+        draw_quad(time, &projection);
 
         request_animation_frame(cb);
     });
@@ -22,20 +33,18 @@ pub fn main() {
     request_animation_frame(&cb);
 }
 
-fn make_draw_triangle(context: &WebGl2RenderingContext) -> impl Fn(f64) {
+fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
     let vert_shader = compile_shader(
         &context,
         WebGl2RenderingContext::VERTEX_SHADER,
         r##"#version 300 es
     
         in vec2 position;
-        uniform vec2 rot_vec;
-        out vec2 clip_pos;
+        uniform mat3x3 model_view_projection;
 
         void main() { 
-            vec2 rot_position = (position.x * rot_vec) + (position.y * vec2(-rot_vec.y, rot_vec.x));
-            gl_Position = vec4(rot_position, 0.0, 1.0);
-            clip_pos = position;
+            gl_Position.xyw = model_view_projection * vec3(position.x, position.y, 1.0);
+            gl_Position.z = 0.0;
         }
         "##,
     )
@@ -47,11 +56,10 @@ fn make_draw_triangle(context: &WebGl2RenderingContext) -> impl Fn(f64) {
         r##"#version 300 es
     
         precision highp float;
-        in vec2 clip_pos;
         out vec4 outColor;
         
         void main() {
-            outColor = vec4(clip_pos.xy * 0.5 + 0.5, 0.0, 1);
+            outColor = vec4(1.0, 1.0, 1.0, 1.0);
         }
         "##,
     )
@@ -64,7 +72,7 @@ fn make_draw_triangle(context: &WebGl2RenderingContext) -> impl Fn(f64) {
     let buffer = context.create_buffer().expect("failed to create buffer");
     context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
 
-    let vertices: [f32; 6] = [-0.7, -0.7, 0.7, -0.7, 0.0, 0.7];
+    let vertices: [f32; 8] = [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5, -0.5];
     context.buffer_data_with_array_buffer_view(
         WebGl2RenderingContext::ARRAY_BUFFER,
         &Float32Array::from(vertices.as_ref()),
@@ -75,19 +83,22 @@ fn make_draw_triangle(context: &WebGl2RenderingContext) -> impl Fn(f64) {
     context.vertex_attrib_pointer_with_i32(position_attribute_location, 2, WebGl2RenderingContext::FLOAT, false, 0, 0);
     context.enable_vertex_attrib_array(position_attribute_location);
 
-    let rot_uniform_location = context
-        .get_uniform_location(&program, "rot_vec")
+    let model_view_projection_loc = context
+        .get_uniform_location(&program, "model_view_projection")
         .expect("failed to get uniform location");
 
     let context = context.clone();
-    move |time| {
-        let vert_count = (vertices.len() / 2) as i32;
-        context.uniform2f(
-            Some(&rot_uniform_location),
-            time.cos() as f32,
-            time.sin() as f32,
+    move |time:f64, projection:&Mat3| {
+        let model_view = 
+            Mat3::from_angle(time as f32) * 
+            Mat3::from_scale(Vec2::new(200.0, 200.0));
+        context.uniform_matrix3fv_with_f32_array(
+            Some(&model_view_projection_loc),
+            false,
+            (*projection * model_view).as_ref(),
         );
-        context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vert_count);
+        let vert_count = (vertices.len() / 2) as i32;
+        context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, vert_count);
     }
 }
 
