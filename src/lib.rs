@@ -2,12 +2,17 @@ use std::{cell::RefCell, rc::Rc};
 
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
+use render::{VertexFormat, VertexAttributeType, VertexAttribute, make_program, make_vao};
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader};
+use web_sys::{WebGl2RenderingContext};
+use log::error;
+
+mod render;
 
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
+    console_log::init().unwrap();
 
     let context = get_context();
     let draw_quad = make_draw_quad(&context);
@@ -16,7 +21,6 @@ pub fn main() {
         let time = time_ms / 1e3;
         context.clear_color(0.0, 0.0, 0.0, 1.0);
         context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-
         let canvas = context
             .canvas()
             .unwrap()
@@ -34,9 +38,18 @@ pub fn main() {
 }
 
 fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
-    let vert_shader = compile_shader(
+    let vert_format = VertexFormat {
+        attributes: vec![
+            VertexAttribute {
+                name: String::from("position"),
+                type_: VertexAttributeType::Vec2,
+            }
+        ]
+    };
+
+    let program = make_program(
         &context,
-        WebGl2RenderingContext::VERTEX_SHADER,
+        &vert_format,
         r##"#version 300 es
     
         in vec2 position;
@@ -47,12 +60,6 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
             gl_Position.z = 0.0;
         }
         "##,
-    )
-    .expect("failed to compile vert_shader");
-
-    let frag_shader = compile_shader(
-        &context,
-        WebGl2RenderingContext::FRAGMENT_SHADER,
         r##"#version 300 es
     
         precision highp float;
@@ -63,25 +70,18 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
         }
         "##,
     )
-    .expect("failed to compile frag_shader");
-
-    let program =
-        link_program(&context, &vert_shader, &frag_shader).expect("failed to link program");
-    context.use_program(Some(&program));
-
-    let buffer = context.create_buffer().expect("failed to create buffer");
-    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+    .expect("failed to compile program");
 
     let vertices: [f32; 8] = [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5, -0.5];
+    let buffer = context.create_buffer().expect("failed to create buffer");
+    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
     context.buffer_data_with_array_buffer_view(
         WebGl2RenderingContext::ARRAY_BUFFER,
         &Float32Array::from(vertices.as_ref()),
         WebGl2RenderingContext::STATIC_DRAW,
     );
 
-    let position_attribute_location = context.get_attrib_location(&program, "position") as u32;
-    context.vertex_attrib_pointer_with_i32(position_attribute_location, 2, WebGl2RenderingContext::FLOAT, false, 0, 0);
-    context.enable_vertex_attrib_array(position_attribute_location);
+    let vao = make_vao(&context, &vert_format, &buffer).expect("failedc to create vao");
 
     let model_view_projection_loc = context
         .get_uniform_location(&program, "model_view_projection")
@@ -97,6 +97,7 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
             false,
             (*projection * model_view).as_ref(),
         );
+        context.bind_vertex_array(Some(&vao));
         let vert_count = (vertices.len() / 2) as i32;
         context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, vert_count);
     }
@@ -133,54 +134,4 @@ fn request_animation_frame(f: &Callback) {
         .expect("`window` failed")
         .request_animation_frame(f.borrow().as_ref().unwrap().as_ref().unchecked_ref())
         .expect("`requestAnimationFrame` failed");
-}
-
-fn compile_shader(
-    context: &WebGl2RenderingContext,
-    shader_type: u32,
-    source: &str,
-) -> Result<WebGlShader, String> {
-    let shader = context
-        .create_shader(shader_type)
-        .ok_or_else(|| String::from("Unable to create shader object"))?;
-    context.shader_source(&shader, source);
-    context.compile_shader(&shader);
-
-    if context
-        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
-        .as_bool()
-        .unwrap_or(false)
-    {
-        Ok(shader)
-    } else {
-        Err(context
-            .get_shader_info_log(&shader)
-            .unwrap_or_else(|| String::from("Unknown error creating shader")))
-    }
-}
-
-fn link_program(
-    context: &WebGl2RenderingContext,
-    vert_shader: &WebGlShader,
-    frag_shader: &WebGlShader,
-) -> Result<WebGlProgram, String> {
-    let program = context
-        .create_program()
-        .ok_or_else(|| String::from("Unable to create shader object"))?;
-
-    context.attach_shader(&program, vert_shader);
-    context.attach_shader(&program, frag_shader);
-    context.link_program(&program);
-
-    if context
-        .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
-        .as_bool()
-        .unwrap_or(false)
-    {
-        Ok(program)
-    } else {
-        Err(context
-            .get_program_info_log(&program)
-            .unwrap_or_else(|| String::from("Unknown error creating program object")))
-    }
 }
