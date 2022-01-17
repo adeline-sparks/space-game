@@ -2,10 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{VertexFormat, VertexAttributeType, VertexAttribute, make_program, make_vao};
-use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{WebGl2RenderingContext};
 use log::error;
+use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat};
+use wasm_bindgen::{prelude::*, JsCast};
+use web_sys::WebGl2RenderingContext;
 
 mod render;
 
@@ -28,7 +28,8 @@ pub fn main() {
             .unwrap();
         context.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
 
-        let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+        let projection =
+            Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
         draw_quad(time, &projection);
 
         request_animation_frame(cb);
@@ -39,12 +40,10 @@ pub fn main() {
 
 fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
     let vert_format = VertexFormat {
-        attributes: vec![
-            VertexAttribute {
-                name: String::from("position"),
-                type_: VertexAttributeType::Vec2,
-            }
-        ]
+        attributes: vec![VertexAttribute {
+            name: String::from("position"),
+            type_: VertexAttributeType::Vec2,
+        }],
     };
 
     let program = make_program(
@@ -88,10 +87,9 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
         .expect("failed to get uniform location");
 
     let context = context.clone();
-    move |time:f64, projection:&Mat3| {
-        let model_view = 
-            Mat3::from_angle(time as f32) * 
-            Mat3::from_scale(Vec2::new(200.0, 200.0));
+    move |time: f64, projection: &Mat3| {
+        context.use_program(Some(&program));
+        let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(200.0, 200.0));
         context.uniform_matrix3fv_with_f32_array(
             Some(&model_view_projection_loc),
             false,

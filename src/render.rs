@@ -1,4 +1,6 @@
-use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject, WebGlBuffer, WebGlProgram, WebGlShader};
+use web_sys::{
+    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject,
+};
 
 pub struct VertexFormat {
     pub attributes: Vec<VertexAttribute>,
@@ -35,18 +37,20 @@ impl VertexAttributeType {
 }
 
 pub fn make_vao(
-    context: &WebGl2RenderingContext, 
+    context: &WebGl2RenderingContext,
     format: &VertexFormat,
     buffer: &WebGlBuffer,
-) -> Result<WebGlVertexArrayObject, String>
-    {
+) -> Result<WebGlVertexArrayObject, String> {
     context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(buffer));
 
-    let vao = context.create_vertex_array()
+    let vao = context
+        .create_vertex_array()
         .ok_or_else(|| String::from("Failed to create vertex array object"))?;
     context.bind_vertex_array(Some(&vao));
 
-    let stride: usize = format.attributes.iter()
+    let stride: usize = format
+        .attributes
+        .iter()
         .map(|attr| attr.type_.num_bytes())
         .sum();
 
@@ -54,12 +58,12 @@ pub fn make_vao(
     for (i, attr) in format.attributes.iter().enumerate() {
         context.enable_vertex_attrib_array(i as u32);
         context.vertex_attrib_pointer_with_i32(
-                i as u32,
-                attr.type_.num_components() as i32,
-                WebGl2RenderingContext::FLOAT,
-                false,
-                stride as i32,
-                offset as i32,
+            i as u32,
+            attr.type_.num_components() as i32,
+            WebGl2RenderingContext::FLOAT,
+            false,
+            stride as i32,
+            offset as i32,
         );
         offset += attr.type_.num_bytes();
     }
@@ -74,9 +78,14 @@ pub fn make_program(
     frag_source: &str,
 ) -> Result<WebGlProgram, String> {
     let vert_shader = compile_shader(context, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
-    let frag_shader = compile_shader(context, WebGl2RenderingContext::FRAGMENT_SHADER, frag_source)?;
+    let frag_shader = compile_shader(
+        context,
+        WebGl2RenderingContext::FRAGMENT_SHADER,
+        frag_source,
+    )?;
 
-    let program = context.create_program()
+    let program = context
+        .create_program()
         .ok_or_else(|| String::from("Unable to create program object"))?;
     context.attach_shader(&program, &vert_shader);
     context.attach_shader(&program, &frag_shader);
@@ -116,7 +125,7 @@ fn compile_shader(
     {
         return Err(context
             .get_shader_info_log(&shader)
-            .unwrap_or_else(|| String::from("Unknown error creating shader")))
+            .unwrap_or_else(|| String::from("Unknown error creating shader")));
     }
 
     Ok(shader)

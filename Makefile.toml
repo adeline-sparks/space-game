@@ -1,0 +1,4 @@
+[tasks.serve]
+install_crate = { crate_name = "https", binary = "httplz", test_arg = "--help" }
+command = "httplz"
+dependencies = ["build"]
