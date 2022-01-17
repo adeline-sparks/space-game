@@ -40,10 +40,16 @@ pub fn main() {
 
 fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
     let vert_format = VertexFormat {
-        attributes: vec![VertexAttribute {
-            name: String::from("position"),
-            type_: VertexAttributeType::Vec2,
-        }],
+        attributes: vec![
+            VertexAttribute {
+                name: String::from("position"),
+                type_: VertexAttributeType::Vec2,
+            },
+            VertexAttribute {
+                name: String::from("color"),
+                type_: VertexAttributeType::Vec3,
+            }
+        ],
     };
 
     let program = make_program(
@@ -52,26 +58,40 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
         r##"#version 300 es
     
         in vec2 position;
+        in vec3 color_vert;
         uniform mat3x3 model_view_projection;
+        out vec3 color;
 
         void main() { 
             gl_Position.xyw = model_view_projection * vec3(position.x, position.y, 1.0);
             gl_Position.z = 0.0;
+            color = color_vert;
         }
         "##,
         r##"#version 300 es
     
         precision highp float;
+        in vec3 color;
         out vec4 outColor;
         
         void main() {
-            outColor = vec4(1.0, 1.0, 1.0, 1.0);
+            outColor.rgb = color;
+            outColor.a = 1.0;
         }
         "##,
     )
     .expect("failed to compile program");
 
-    let vertices: [f32; 8] = [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5, -0.5];
+    let vertices: &[f32] = &[
+        -0.5, 0.5, 
+        1.0, 1.0, 1.0,
+        -0.5, -0.5, 
+        1.0, 0.0, 0.0,
+        0.5, 0.5, 
+        0.0, 1.0, 0.0,
+        0.5, -0.5,
+        0.0, 0.0, 1.0,
+    ];
     let buffer = context.create_buffer().expect("failed to create buffer");
     context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
     context.buffer_data_with_array_buffer_view(
