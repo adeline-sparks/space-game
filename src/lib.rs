@@ -2,7 +2,6 @@ use std::{cell::RefCell, rc::Rc};
 
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use log::error;
 use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::WebGl2RenderingContext;
@@ -46,7 +45,7 @@ fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
                 type_: VertexAttributeType::Vec2,
             },
             VertexAttribute {
-                name: String::from("color"),
+                name: String::from("color_vert"),
                 type_: VertexAttributeType::Vec3,
             }
         ],

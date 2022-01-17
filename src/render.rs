@@ -1,9 +1,21 @@
+use std::collections::HashMap;
+
 use web_sys::{
     WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject,
 };
 
 pub struct VertexFormat {
     pub attributes: Vec<VertexAttribute>,
+}
+
+impl VertexFormat {
+    pub fn make_attribute_map(&self) -> HashMap<&str, &VertexAttribute> {
+        let mut map = HashMap::new();
+        for attr in &self.attributes {
+            map.insert(attr.name.as_str(), attr);
+        }
+        map
+    }
 }
 
 pub struct VertexAttribute {
@@ -34,6 +46,22 @@ impl VertexAttributeType {
             VertexAttributeType::Vec3 => 12,
         }
     }
+
+    fn webgl_scalar_type(self) -> u32 {
+        match self {
+            VertexAttributeType::Float |
+            VertexAttributeType::Vec2 |
+            VertexAttributeType::Vec3 => WebGl2RenderingContext::FLOAT,
+        }
+    }
+
+    fn webgl_type(self) -> u32 {
+        match self {
+            VertexAttributeType::Float => WebGl2RenderingContext::FLOAT,
+            VertexAttributeType::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
+            VertexAttributeType::Vec3 => WebGl2RenderingContext::FLOAT_VEC3,
+        }
+    }
 }
 
 pub fn make_vao(
@@ -60,7 +88,7 @@ pub fn make_vao(
         context.vertex_attrib_pointer_with_i32(
             i as u32,
             attr.type_.num_components() as i32,
-            WebGl2RenderingContext::FLOAT,
+            attr.type_.webgl_scalar_type(),
             false,
             stride as i32,
             offset as i32,
@@ -102,6 +130,33 @@ pub fn make_program(
         return Err(context
             .get_program_info_log(&program)
             .unwrap_or_else(|| String::from("Unknown error creating program object")));
+    }
+
+    let attribute_map = vert_format.make_attribute_map();
+
+    let num_active_attributes = context
+        .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
+        .as_f64()
+        .map(|v| v as usize)
+        .ok_or_else(|| String::from("Failed to retrieve active attributes"))?;
+    for i in 0..num_active_attributes {
+        let info = context
+            .get_active_attrib(&program, i as u32)
+            .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
+
+        let attribute = attribute_map
+            .get(info.name().as_str())
+            .cloned()
+            .ok_or_else(|| format!("Shader requires unknown vertex attribute {}", info.name()))?;
+        
+        if info.type_() != attribute.type_.webgl_type() {
+            return Err(format!(
+                "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
+                info.name(),
+                info.type_(),
+                attribute.type_.webgl_type(),
+            ))
+        }
     }
 
     Ok(program)
