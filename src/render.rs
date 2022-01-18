@@ -1,9 +1,10 @@
 use std::{collections::HashMap};
 
-use js_sys::Promise;
+use js_sys::{Promise, Function};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture,
+    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture, Window, Document,
 };
 
 pub struct VertexFormat {
@@ -19,7 +20,7 @@ impl VertexFormat {
         map
     }
 
-    fn total_bytes(&self) -> usize {
+    pub fn total_bytes(&self) -> usize {
         self.attributes
             .iter()
             .map(|attr| attr.type_.num_bytes())
@@ -41,7 +42,7 @@ pub enum VertexAttributeType {
 }
 
 impl VertexAttributeType {
-    fn num_components(self) -> u32 {
+    pub fn num_components(self) -> u32 {
         match self {
             VertexAttributeType::Float => 1,
             VertexAttributeType::Vec2 => 2,
@@ -49,7 +50,7 @@ impl VertexAttributeType {
         }
     }
 
-    fn num_bytes(self) -> usize {
+    pub fn num_bytes(self) -> usize {
         match self {
             VertexAttributeType::Float => 4,
             VertexAttributeType::Vec2 => 8,
@@ -57,7 +58,7 @@ impl VertexAttributeType {
         }
     }
 
-    fn webgl_scalar_type(self) -> u32 {
+    pub fn webgl_scalar_type(self) -> u32 {
         match self {
             VertexAttributeType::Float |
             VertexAttributeType::Vec2 |
@@ -65,7 +66,7 @@ impl VertexAttributeType {
         }
     }
 
-    fn webgl_type(self) -> u32 {
+    pub fn webgl_type(self) -> u32 {
         match self {
             VertexAttributeType::Float => WebGl2RenderingContext::FLOAT,
             VertexAttributeType::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
@@ -83,11 +84,10 @@ pub fn make_vao(
 
     let vao = context
         .create_vertex_array()
-        .ok_or_else(|| String::from("Failed to create vertex array object"))?;
+        .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
     context.bind_vertex_array(Some(&vao));
 
     let stride: usize = format.total_bytes();
-
     let mut offset = 0;
     for (i, attr) in format.attributes.iter().enumerate() {
         context.enable_vertex_attrib_array(i as u32);
@@ -111,16 +111,18 @@ pub fn make_program(
     vert_source: &str,
     frag_source: &str,
 ) -> Result<WebGlProgram, String> {
-    let vert_shader = compile_shader(context, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
+    let vert_shader = compile_shader(
+        context, 
+        WebGl2RenderingContext::VERTEX_SHADER, 
+        vert_source)?;
     let frag_shader = compile_shader(
-        context,
-        WebGl2RenderingContext::FRAGMENT_SHADER,
-        frag_source,
-    )?;
+        context, 
+        WebGl2RenderingContext::FRAGMENT_SHADER, 
+        frag_source)?;
 
     let program = context
         .create_program()
-        .ok_or_else(|| String::from("Unable to create program object"))?;
+        .ok_or_else(|| "Failed to create_program".to_string())?;
     context.attach_shader(&program, &vert_shader);
     context.attach_shader(&program, &frag_shader);
     for (i, attr) in vert_format.attributes.iter().enumerate() {
@@ -135,7 +137,7 @@ pub fn make_program(
     {
         return Err(context
             .get_program_info_log(&program)
-            .unwrap_or_else(|| String::from("Unknown error creating program object")));
+            .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
     }
 
     let attribute_map = vert_format.make_attribute_map();
@@ -143,8 +145,8 @@ pub fn make_program(
     let num_active_attributes = context
         .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
         .as_f64()
-        .map(|v| v as usize)
-        .ok_or_else(|| String::from("Failed to retrieve active attributes"))?;
+        .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
+        as usize;
     for i in 0..num_active_attributes {
         let info = context
             .get_active_attrib(&program, i as u32)
@@ -175,7 +177,7 @@ fn compile_shader(
 ) -> Result<WebGlShader, String> {
     let shader = context
         .create_shader(shader_type)
-        .ok_or_else(|| String::from("Unable to create shader object"))?;
+        .ok_or_else(|| "Failed to create_shader".to_string())?;
     context.shader_source(&shader, source);
     context.compile_shader(&shader);
 
@@ -186,7 +188,7 @@ fn compile_shader(
     {
         return Err(context
             .get_shader_info_log(&shader)
-            .unwrap_or_else(|| String::from("Unknown error creating shader")));
+            .unwrap_or_else(|| "Failed to `get_shader_info_log`".to_string()));
     }
 
     Ok(shader)
@@ -194,21 +196,21 @@ fn compile_shader(
 
 pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result<WebGlTexture, String> {
     let image = web_sys::HtmlImageElement::new()
-        .expect("Failed to create Image");
+        .expect("Failed to create HtmlImageElement");
     image.set_src(src);
-    let promise = Promise::new(&mut |resolve, reject| {
-        image.add_event_listener_with_callback("load", &resolve)
+    future_from_callback(|cb| {
+        image.add_event_listener_with_callback("load", &cb)
             .expect("Failed to register for image load event");
-        image.add_event_listener_with_callback("error", &reject)
+        image.add_event_listener_with_callback("error", &cb)
             .expect("Failed to register for image error event"); 
-    });
-
-    JsFuture::from(promise)
-        .await
-        .map_err(|_| format!("Failed to load image {}", src))?;
+    }).await;
     
+    if !image.complete() || image.natural_height() == 0 {
+        return Err("Failed to load image".to_string());
+    }
+
     let texture = context.create_texture()
-        .expect("`create_texture` failed");
+        .ok_or_else(|| "Failed to `create_texture`".to_string())?;
     context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
     context.tex_image_2d_with_u32_and_u32_and_html_image_element(
         WebGl2RenderingContext::TEXTURE_2D,
@@ -217,7 +219,7 @@ pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result
         WebGl2RenderingContext::RGBA,
         WebGl2RenderingContext::UNSIGNED_BYTE,
         &image,
-    ).expect("`tex_image_2d` failed");
+    ).map_err(|_| "Failed to `tex_image_2d`".to_string())?;
     context.tex_parameteri(
         WebGl2RenderingContext::TEXTURE_2D, 
         WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
@@ -226,41 +228,43 @@ pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result
         WebGl2RenderingContext::TEXTURE_2D, 
         WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
         WebGl2RenderingContext::NEAREST as i32);
+        
     Ok(texture)
 }
 
 pub async fn dom_content_loaded() {
-    let document = web_sys::window()
-        .expect("no global `window` exists")
-        .document()
-        .expect("no `document` exists");
-    if document.ready_state() != "loading" {
+    if expect_document().ready_state() != "loading" {
         return;
     }
 
-    let promise = Promise::new(&mut |resolve, _reject| {
-        web_sys::window()
-            .expect("`window` failed")
+    future_from_callback(|resolve| {
+        expect_window()
             .add_event_listener_with_callback("DOMContentLoaded", &resolve)
-            .expect("Failed to add DOMContentLoaded handler");
-    });
-
-    JsFuture::from(promise).await.expect("Promise should always resolve");
+            .expect("Failed to add DOMContentLoaded event handler");
+    }).await;
 }
 
 pub async fn animation_frame() -> f64 {
-    let promise = Promise::new(&mut |resolve, _reject| {
-        web_sys::window()
-            .expect("`window` failed")
-            .request_animation_frame(&resolve)
-            .expect("request_animation_frame failed");
-    });
-
-    let time_ms = JsFuture::from(promise)
-        .await
-        .expect("Promise should always resolve")
+    future_from_callback(|cb| {
+        expect_window()
+            .request_animation_frame(&cb)
+            .expect("Failed to `request_animation_frame`");
+    }).await
         .as_f64()
-        .expect("Promise should resolve to float");
+        .expect("request_animation_frame did not provide a float")
+        / 1e3
+}
 
-    time_ms / 1e3
+async fn future_from_callback(mut setup: impl FnMut(Function)) -> JsValue {
+    JsFuture::from(Promise::new(&mut |resolve, _reject| setup(resolve)))
+        .await
+        .expect("Promise did not resolve")
+}
+
+fn expect_window() -> Window {
+    web_sys::window().expect("Global `window` does not exist")
+}
+
+fn expect_document() -> Document {
+    expect_window().document().expect("Global `document` does not exist")
 }
