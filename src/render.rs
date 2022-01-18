@@ -1,8 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future};
 
+use js_sys::Promise;
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject,
 };
+
+use crate::request_animation_frame;
 
 pub struct VertexFormat {
     pub attributes: Vec<VertexAttribute>,
@@ -188,4 +192,19 @@ fn compile_shader(
     }
 
     Ok(shader)
+}
+
+pub async fn animation_frame() -> f64 {
+    let promise = Promise::new(&mut |resolve, reject| {
+        web_sys::window()
+            .expect("`window` failed")
+            .request_animation_frame(&resolve)
+            .expect("request_animation_frame failed");
+    });
+
+    JsFuture::from(promise)
+        .await
+        .expect("Promise should always resolve")
+        .as_f64()
+        .expect("Promise should resolve to float")
 }
