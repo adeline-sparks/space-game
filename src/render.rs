@@ -3,7 +3,7 @@ use std::{collections::HashMap};
 use js_sys::Promise;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject,
+    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture,
 };
 
 pub struct VertexFormat {
@@ -190,6 +190,35 @@ fn compile_shader(
     }
 
     Ok(shader)
+}
+
+pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result<WebGlTexture, String> {
+    let image = web_sys::HtmlImageElement::new()
+        .expect("Failed to create Image");
+    image.set_src(src);
+    let promise = Promise::new(&mut |resolve, reject| {
+        image.add_event_listener_with_callback("load", &resolve)
+            .expect("Failed to register for image load event");
+        image.add_event_listener_with_callback("error", &reject)
+            .expect("Failed to register for image error event"); 
+    });
+
+    JsFuture::from(promise)
+        .await
+        .map_err(|_| format!("Failed to load image {}", src))?;
+    
+    let texture = context.create_texture()
+        .expect("`create_texture` failed");
+    context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
+    context.tex_image_2d_with_u32_and_u32_and_html_image_element(
+        WebGl2RenderingContext::TEXTURE_2D,
+        0,
+        WebGl2RenderingContext::RGBA as i32,
+        WebGl2RenderingContext::RGBA,
+        WebGl2RenderingContext::UNSIGNED_BYTE,
+        &image)
+        .expect("`tex_image_2d` failed");
+    Ok(texture)
 }
 
 pub async fn dom_content_loaded() {

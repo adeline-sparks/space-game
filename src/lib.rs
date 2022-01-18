@@ -1,6 +1,6 @@
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat, animation_frame, dom_content_loaded};
+use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat, animation_frame, dom_content_loaded, load_texture};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::WebGl2RenderingContext;
@@ -15,6 +15,7 @@ pub fn main() {
         dom_content_loaded().await;
         let context = get_context();
         let draw_quad = make_draw_quad(&context);
+        let _tex = load_texture(&context, "floors.png").await.unwrap();
 
         loop {
             let time = animation_frame().await;
