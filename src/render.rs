@@ -16,6 +16,13 @@ impl VertexFormat {
         }
         map
     }
+
+    fn total_bytes(&self) -> usize {
+        self.attributes
+            .iter()
+            .map(|attr| attr.type_.num_bytes())
+            .sum()
+    }
 }
 
 pub struct VertexAttribute {
@@ -76,11 +83,7 @@ pub fn make_vao(
         .ok_or_else(|| String::from("Failed to create vertex array object"))?;
     context.bind_vertex_array(Some(&vao));
 
-    let stride: usize = format
-        .attributes
-        .iter()
-        .map(|attr| attr.type_.num_bytes())
-        .sum();
+    let stride: usize = format.total_bytes();
 
     let mut offset = 0;
     for (i, attr) in format.attributes.iter().enumerate() {
