@@ -1,12 +1,10 @@
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap};
 
 use js_sys::Promise;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject,
 };
-
-use crate::request_animation_frame;
 
 pub struct VertexFormat {
     pub attributes: Vec<VertexAttribute>,
@@ -194,17 +192,38 @@ fn compile_shader(
     Ok(shader)
 }
 
+pub async fn dom_content_loaded() {
+    let document = web_sys::window()
+        .expect("no global `window` exists")
+        .document()
+        .expect("no `document` exists");
+    if document.ready_state() != "loading" {
+        return;
+    }
+
+    let promise = Promise::new(&mut |resolve, _reject| {
+        web_sys::window()
+            .expect("`window` failed")
+            .add_event_listener_with_callback("DOMContentLoaded", &resolve)
+            .expect("Failed to add DOMContentLoaded handler");
+    });
+
+    JsFuture::from(promise).await.expect("Promise should always resolve");
+}
+
 pub async fn animation_frame() -> f64 {
-    let promise = Promise::new(&mut |resolve, reject| {
+    let promise = Promise::new(&mut |resolve, _reject| {
         web_sys::window()
             .expect("`window` failed")
             .request_animation_frame(&resolve)
             .expect("request_animation_frame failed");
     });
 
-    JsFuture::from(promise)
+    let time_ms = JsFuture::from(promise)
         .await
         .expect("Promise should always resolve")
         .as_f64()
-        .expect("Promise should resolve to float")
+        .expect("Promise should resolve to float");
+
+    time_ms / 1e3
 }

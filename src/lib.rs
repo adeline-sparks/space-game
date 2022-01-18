@@ -1,9 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat};
+use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat, animation_frame, dom_content_loaded};
 use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen_futures::spawn_local;
 use web_sys::WebGl2RenderingContext;
 
 mod render;
@@ -12,29 +11,27 @@ mod render;
 pub fn main() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
+    spawn_local(async {
+        dom_content_loaded().await;
+        let context = get_context();
+        let draw_quad = make_draw_quad(&context);
 
-    let context = get_context();
-    let draw_quad = make_draw_quad(&context);
+        loop {
+            let time = animation_frame().await;
+            context.clear_color(0.0, 0.0, 0.0, 1.0);
+            context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+            let canvas = context
+                .canvas()
+                .unwrap()
+                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .unwrap();
+            context.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
 
-    let cb = make_callback(move |cb, time_ms| {
-        let time = time_ms / 1e3;
-        context.clear_color(0.0, 0.0, 0.0, 1.0);
-        context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-        let canvas = context
-            .canvas()
-            .unwrap()
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .unwrap();
-        context.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
-
-        let projection =
-            Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
-        draw_quad(time, &projection);
-
-        request_animation_frame(cb);
+            let projection =
+                Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+            draw_quad(time, &projection);
+        }
     });
-
-    request_animation_frame(&cb);
 }
 
 fn make_draw_quad(context: &WebGl2RenderingContext) -> impl Fn(f64, &Mat3) {
@@ -136,21 +133,4 @@ fn get_context() -> WebGl2RenderingContext {
         .expect("failed to get webgl2 context")
         .dyn_into::<WebGl2RenderingContext>()
         .unwrap()
-}
-
-type Callback = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
-
-fn make_callback<F: FnMut(&Callback, f64) + 'static>(mut f: F) -> Callback {
-    let cb = Rc::new(RefCell::new(None));
-    let cb2 = cb.clone();
-    let body = move |t: f64| f(&cb, t);
-    *cb2.borrow_mut() = Some(Closure::wrap(Box::new(body) as Box<dyn FnMut(f64)>));
-    cb2
-}
-
-fn request_animation_frame(f: &Callback) {
-    web_sys::window()
-        .expect("`window` failed")
-        .request_animation_frame(f.borrow().as_ref().unwrap().as_ref().unchecked_ref())
-        .expect("`requestAnimationFrame` failed");
 }
