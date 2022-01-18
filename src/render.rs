@@ -31,6 +31,7 @@ pub struct VertexAttribute {
 }
 
 #[derive(Copy, Clone)]
+#[allow(unused)]
 pub enum VertexAttributeType {
     Float,
     Vec2,
