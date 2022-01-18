@@ -216,8 +216,16 @@ pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result
         WebGl2RenderingContext::RGBA as i32,
         WebGl2RenderingContext::RGBA,
         WebGl2RenderingContext::UNSIGNED_BYTE,
-        &image)
-        .expect("`tex_image_2d` failed");
+        &image,
+    ).expect("`tex_image_2d` failed");
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D, 
+        WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
+        WebGl2RenderingContext::NEAREST as i32);
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D, 
+        WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
+        WebGl2RenderingContext::NEAREST as i32);
     Ok(texture)
 }
 
