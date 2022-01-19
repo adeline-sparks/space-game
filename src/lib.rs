@@ -1,6 +1,6 @@
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{make_program, make_vao, VertexAttribute, VertexAttributeType, VertexFormat, animation_frame, dom_content_loaded, load_texture};
+use render::{make_program, make_vao, VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
@@ -36,17 +36,27 @@ pub fn main() {
 }
 
 fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> impl Fn(f64, &Mat3) {
-    let vert_format = VertexFormat {
+    let vert_format = ShaderFormat {
         attributes: vec![
             VertexAttribute {
-                name: String::from("vert_pos"),
-                type_: VertexAttributeType::Vec2,
+                name: "vert_pos".to_string(),
+                type_: ShaderType::Vec2,
             },
             VertexAttribute {
-                name: String::from("vert_uv"),
-                type_: VertexAttributeType::Vec2,
-            }
+                name: "vert_uv".to_string(),
+                type_: ShaderType::Vec2,
+            },
         ],
+        uniforms: vec![
+            Uniform {
+                name: "model_view_projection".to_string(),
+                type_: ShaderType::Mat3x3,
+            },
+            Uniform {
+                name: "sampler".to_string(),
+                type_: ShaderType::Sampler2D,
+            }
+        ]
     };
 
     let program = make_program(
