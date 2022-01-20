@@ -7,6 +7,9 @@ use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 mod render;
 
+#[allow(unused)]
+mod state;
+
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
