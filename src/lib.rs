@@ -1,10 +1,11 @@
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{make_program, make_vao, VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform};
+use render::{make_vao, VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
+#[allow(unused)]
 mod render;
 
 #[allow(unused)]
@@ -39,7 +40,7 @@ pub fn main() {
 }
 
 fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> impl Fn(f64, &Mat3) {
-    let vert_format = ShaderFormat {
+    let format = ShaderFormat {
         attributes: vec![
             VertexAttribute {
                 name: "vert_pos".to_string(),
@@ -62,9 +63,9 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
         ]
     };
 
-    let program = make_program(
+    let shader = Shader::compile(
         &context,
-        &vert_format,
+        format,
         r##"#version 300 es
         uniform mat3x3 model_view_projection;
         
@@ -94,11 +95,9 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     )
     .expect("failed to compile program");
 
-    let model_view_projection_loc = context
-        .get_uniform_location(&program, "model_view_projection")
+    let model_view_projection_loc = shader.uniform_location::<glam::Mat3>(context, "model_view_projection")
         .expect("failed to get uniform location of model_view_projection");
-    let sampler_loc = context
-        .get_uniform_location(&program, "sampler")
+    let sampler_loc = shader.uniform_location::<i32>(context, "sampler")
         .expect("failed to get uniform location of sampler");
 
     let vertices: &[f32] = &[
@@ -119,24 +118,19 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
         WebGl2RenderingContext::STATIC_DRAW,
     );
 
-    let vao = make_vao(&context, &vert_format, &buffer).expect("failed to create vao");
+    let vao = make_vao(&context, shader.format(), &buffer).expect("failed to create vao");
 
     let context = context.clone();
     let texture = texture.clone();
     move |time: f64, projection: &Mat3| {
-        context.use_program(Some(&program));
 
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
-        context.uniform_matrix3fv_with_f32_array(
-            Some(&model_view_projection_loc),
-            false,
-            (*projection * model_view).as_ref(),
-        );
+        shader.set_uniform(&context, &model_view_projection_loc, *projection * model_view);
 
         context.bind_vertex_array(Some(&vao));
         context.active_texture(WebGl2RenderingContext::TEXTURE0);
         context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
-        context.uniform1i(Some(&sampler_loc), 0);
+        shader.set_uniform(&context, &sampler_loc, 0);
         let vert_count = (vertices.len() / 4) as i32;
         context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, vert_count);
     }

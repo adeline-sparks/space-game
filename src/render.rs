@@ -1,15 +1,38 @@
-use std::{collections::HashMap};
+use std::{collections::HashMap, marker::PhantomData};
 
 use js_sys::{Promise, Function};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture, Window, Document,
+    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture, Window, Document, WebGlUniformLocation,
 };
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct ShaderFormat {
     pub attributes: Vec<VertexAttribute>,
     pub uniforms: Vec<Uniform>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct VertexAttribute {
+    pub name: String,
+    pub type_: ShaderType,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Uniform {
+    pub name: String,
+    pub type_: ShaderType,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum ShaderType {
+    Float,
+    Vec2,
+    Vec3,
+    Mat3x3,
+    Int,
+    Sampler2D,
 }
 
 impl ShaderFormat {
@@ -29,32 +52,12 @@ impl ShaderFormat {
         map 
     }
 
-    pub fn total_bytes(&self) -> usize {
+    pub fn vertex_bytes(&self) -> usize {
         self.attributes
             .iter()
             .map(|attr| attr.type_.num_bytes())
             .sum()
     }
-}
-
-pub struct VertexAttribute {
-    pub name: String,
-    pub type_: ShaderType,
-}
-
-pub struct Uniform {
-    pub name: String,
-    pub type_: ShaderType,
-}
-
-#[derive(Copy, Clone)]
-#[allow(unused)]
-pub enum ShaderType {
-    Float,
-    Vec2,
-    Vec3,
-    Mat3x3,
-    Sampler2D,
 }
 
 impl ShaderType {
@@ -64,6 +67,7 @@ impl ShaderType {
             ShaderType::Vec2 => 2,
             ShaderType::Vec3 => 3,
             ShaderType::Mat3x3 => 9,
+            ShaderType::Int => 1,
             ShaderType::Sampler2D => todo!(),
         }
     }
@@ -74,6 +78,7 @@ impl ShaderType {
             ShaderType::Vec2 => 8,
             ShaderType::Vec3 => 12,
             ShaderType::Mat3x3 => 36,
+            ShaderType::Int => 4,
             ShaderType::Sampler2D => todo!(),
         }
     }
@@ -84,6 +89,7 @@ impl ShaderType {
             ShaderType::Vec2 |
             ShaderType::Vec3 |
             ShaderType::Mat3x3 => WebGl2RenderingContext::FLOAT,
+            ShaderType::Int => WebGl2RenderingContext::INT,
             ShaderType::Sampler2D => todo!(),
         }
     }
@@ -94,8 +100,178 @@ impl ShaderType {
             ShaderType::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
             ShaderType::Vec3 => WebGl2RenderingContext::FLOAT_VEC3,
             ShaderType::Mat3x3 => WebGl2RenderingContext::FLOAT_MAT3,
+            ShaderType::Int => WebGl2RenderingContext::INT,
             ShaderType::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
         }
+    }
+}
+
+pub struct Shader {
+    format: ShaderFormat,
+    program: WebGlProgram,
+}
+
+impl Shader {
+    pub fn compile(
+        context: &WebGl2RenderingContext,
+        format: ShaderFormat,
+        vert_source: &str,
+        frag_source: &str,
+    ) -> Result<Shader, String> {
+        let vert_shader = compile_shader(
+            context, 
+            WebGl2RenderingContext::VERTEX_SHADER, 
+            vert_source)?;
+        let frag_shader = compile_shader(
+            context, 
+            WebGl2RenderingContext::FRAGMENT_SHADER, 
+            frag_source)?;
+    
+        let program = context
+            .create_program()
+            .ok_or_else(|| "Failed to create_program".to_string())?;
+        context.attach_shader(&program, &vert_shader);
+        context.attach_shader(&program, &frag_shader);
+        for (i, attr) in format.attributes.iter().enumerate() {
+            context.bind_attrib_location(&program, i as u32, &attr.name);
+        }
+        context.link_program(&program);
+    
+        if context
+            .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
+            .as_bool()
+            != Some(true)
+        {
+            return Err(context
+                .get_program_info_log(&program)
+                .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
+        }
+    
+        let mut attribute_map = format.make_attribute_map();
+        let num_active_attributes = context
+            .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
+            .as_f64()
+            .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
+            as usize;
+        for i in 0..num_active_attributes {
+            let info = context
+                .get_active_attrib(&program, i as u32)
+                .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
+    
+            let attribute = attribute_map
+                .remove(info.name().as_str())
+                .ok_or_else(|| format!("Shader requires unknown vertex attribute {}", info.name()))?;
+            
+            if info.type_() != attribute.type_.webgl_type() {
+                return Err(format!(
+                    "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
+                    info.name(),
+                    info.type_(),
+                    attribute.type_.webgl_type(),
+                ))
+            }
+        }
+    
+        if !attribute_map.is_empty() {
+            let mut names = attribute_map.keys().cloned().collect::<Vec<_>>();
+            names.sort();
+            return Err(format!(
+                "Shader is missing these attributes: {}", names.join(", ")
+            ))
+        }
+    
+        let mut uniform_map = format.make_uniform_map();
+        let num_active_uniforms = context
+            .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_UNIFORMS)
+            .as_f64()
+            .ok_or_else(|| "Failed to retrieve active uniforms".to_string())?
+            as usize;
+        for i in 0..num_active_uniforms {
+            let info = context
+                .get_active_uniform(&program, i as u32)
+                .ok_or_else(|| format!("Failed to retrieve active uniform {}", i))?;
+    
+            let uniform = uniform_map
+                .remove(info.name().as_str())
+                .ok_or_else(|| format!("Sahder requires unknown uniform {}", info.name()))?;
+    
+            if info.type_() != uniform.type_.webgl_type() {
+                return Err(format!(
+                    "Data type mismatch on uniform {} (Found {:#04X} expected {:#04X})",
+                    info.name(),
+                    info.type_(),
+                    uniform.type_.webgl_type(),
+                ))            
+            }
+        }    
+    
+        Ok(Shader { format, program })
+    }
+
+    pub fn format(&self) -> &ShaderFormat {
+        &self.format
+    }
+
+    pub fn uniform_location<T: UniformValue>(&self, context: &WebGl2RenderingContext, name: &str) -> Result<ShaderUniform<T>, String> {
+        // TODO check against our format
+        let location = context.get_uniform_location(&self.program, name).expect("Failed to `get_uniform_location`");
+        Ok(ShaderUniform { location, phantom: PhantomData })
+    }
+
+    pub fn set_uniform<T: UniformValue>(&self, context: &WebGl2RenderingContext, uniform: &ShaderUniform<T>, value: T) {
+        context.use_program(Some(&self.program));
+        value.set_uniform(context, &uniform.location);
+    }
+}
+
+pub struct ShaderUniform<T: UniformValue> {
+    location: WebGlUniformLocation,
+    phantom: PhantomData<T>,
+}
+
+pub trait UniformValue {
+    const SHADER_TYPE: ShaderType;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation);
+}
+
+impl UniformValue for f32 {
+    const SHADER_TYPE: ShaderType = ShaderType::Float;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform1f(Some(&loc), *self);
+    }
+}
+
+impl UniformValue for glam::Vec2 {
+    const SHADER_TYPE: ShaderType = ShaderType::Vec2;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform2f(Some(&loc), self.x, self.y);
+    }
+}
+
+impl UniformValue for glam::Vec3 {
+    const SHADER_TYPE: ShaderType = ShaderType::Vec3;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform3f(Some(&loc), self.x, self.y, self.z);
+    }
+}
+
+impl UniformValue for glam::Mat3 {
+    const SHADER_TYPE: ShaderType = ShaderType::Mat3x3;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
+    }
+}
+
+impl UniformValue for i32 {
+    const SHADER_TYPE: ShaderType = ShaderType::Int;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform1i(Some(&loc), *self);
     }
 }
 
@@ -111,7 +287,7 @@ pub fn make_vao(
         .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
     context.bind_vertex_array(Some(&vao));
 
-    let stride: usize = format.total_bytes();
+    let stride: usize = format.vertex_bytes();
     let mut offset = 0;
     for (i, attr) in format.attributes.iter().enumerate() {
         context.enable_vertex_attrib_array(i as u32);
@@ -127,102 +303,6 @@ pub fn make_vao(
     }
 
     Ok(vao)
-}
-
-pub fn make_program(
-    context: &WebGl2RenderingContext,
-    shader_format: &ShaderFormat,
-    vert_source: &str,
-    frag_source: &str,
-) -> Result<WebGlProgram, String> {
-    let vert_shader = compile_shader(
-        context, 
-        WebGl2RenderingContext::VERTEX_SHADER, 
-        vert_source)?;
-    let frag_shader = compile_shader(
-        context, 
-        WebGl2RenderingContext::FRAGMENT_SHADER, 
-        frag_source)?;
-
-    let program = context
-        .create_program()
-        .ok_or_else(|| "Failed to create_program".to_string())?;
-    context.attach_shader(&program, &vert_shader);
-    context.attach_shader(&program, &frag_shader);
-    for (i, attr) in shader_format.attributes.iter().enumerate() {
-        context.bind_attrib_location(&program, i as u32, &attr.name);
-    }
-    context.link_program(&program);
-
-    if context
-        .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
-        .as_bool()
-        != Some(true)
-    {
-        return Err(context
-            .get_program_info_log(&program)
-            .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
-    }
-
-    let mut attribute_map = shader_format.make_attribute_map();
-    let num_active_attributes = context
-        .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
-        .as_f64()
-        .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
-        as usize;
-    for i in 0..num_active_attributes {
-        let info = context
-            .get_active_attrib(&program, i as u32)
-            .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
-
-        let attribute = attribute_map
-            .remove(info.name().as_str())
-            .ok_or_else(|| format!("Shader requires unknown vertex attribute {}", info.name()))?;
-        
-        if info.type_() != attribute.type_.webgl_type() {
-            return Err(format!(
-                "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
-                info.name(),
-                info.type_(),
-                attribute.type_.webgl_type(),
-            ))
-        }
-    }
-
-    if !attribute_map.is_empty() {
-        let mut names = attribute_map.keys().cloned().collect::<Vec<_>>();
-        names.sort();
-        return Err(format!(
-            "Shader is missing these attributes: {}", names.join(", ")
-        ))
-    }
-
-    let mut uniform_map = shader_format.make_uniform_map();
-    let num_active_uniforms = context
-        .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_UNIFORMS)
-        .as_f64()
-        .ok_or_else(|| "Failed to retrieve active uniforms".to_string())?
-        as usize;
-    for i in 0..num_active_uniforms {
-        let info = context
-            .get_active_uniform(&program, i as u32)
-            .ok_or_else(|| format!("Failed to retrieve active uniform {}", i))?;
-
-        let uniform = uniform_map
-            .remove(info.name().as_str())
-            .ok_or_else(|| format!("Sahder requires unknown uniform {}", info.name()))?;
-
-        if info.type_() != uniform.type_.webgl_type() {
-            return Err(format!(
-                "Data type mismatch on uniform {} (Found {:#04X} expected {:#04X})",
-                info.name(),
-                info.type_(),
-                uniform.type_.webgl_type(),
-            ))            
-        }
-    }    
-
-    Ok(program)
 }
 
 fn compile_shader(
