@@ -94,6 +94,13 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     )
     .expect("failed to compile program");
 
+    let model_view_projection_loc = context
+        .get_uniform_location(&program, "model_view_projection")
+        .expect("failed to get uniform location of model_view_projection");
+    let sampler_loc = context
+        .get_uniform_location(&program, "sampler")
+        .expect("failed to get uniform location of sampler");
+
     let vertices: &[f32] = &[
         -0.5, 0.5, 
         0.0, 1.0,
@@ -112,31 +119,24 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
         WebGl2RenderingContext::STATIC_DRAW,
     );
 
-    let vao = make_vao(&context, &vert_format, &buffer).expect("failedc to create vao");
-
-    let model_view_projection_loc = context
-        .get_uniform_location(&program, "model_view_projection")
-        .expect("failed to get uniform location of model_view_projection");
-    let sampler_loc = context
-        .get_uniform_location(&program, "sampler")
-        .expect("failed to get uniform location of sampler");
+    let vao = make_vao(&context, &vert_format, &buffer).expect("failed to create vao");
 
     let context = context.clone();
     let texture = texture.clone();
     move |time: f64, projection: &Mat3| {
         context.use_program(Some(&program));
+
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         context.uniform_matrix3fv_with_f32_array(
             Some(&model_view_projection_loc),
             false,
             (*projection * model_view).as_ref(),
         );
-        context.bind_vertex_array(Some(&vao));
 
+        context.bind_vertex_array(Some(&vao));
         context.active_texture(WebGl2RenderingContext::TEXTURE0);
         context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         context.uniform1i(Some(&sampler_loc), 0);
-
         let vert_count = (vertices.len() / 4) as i32;
         context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, vert_count);
     }

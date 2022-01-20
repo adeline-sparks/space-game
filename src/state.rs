@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, collections::HashMap, iter};
+use std::{any::{Any, TypeId}, collections::{HashMap, HashSet}, iter, cmp::Ordering};
 
 pub trait System: 'static {
     fn dependencies(&self) -> &'static [SystemDependency];
@@ -10,8 +10,8 @@ pub trait System: 'static {
 }
 
 pub struct SystemDependency {
-    id: TypeId,
-    type_: SystemDependencyType,
+    pub id: TypeId,
+    pub type_: SystemDependencyType,
 }
 
 pub enum SystemDependencyType {
@@ -29,12 +29,15 @@ impl SystemContainer {
     pub fn len(&self) -> usize { 
         self.0.len() 
     }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 
     pub fn insert<T: System>(&mut self, sys: T) -> Option<()> { 
         self.insert_with_box(Box::new(sys)).map(|_| ())
     }
     pub fn insert_with_box(&mut self, sys: Box<dyn System>) -> Option<Box<dyn System>> { 
-        self.0.insert(sys.as_any().type_id(), sys)
+        self.0.insert(sys.type_id(), sys)
     }
 
     pub fn remove<T: System>(&mut self) -> Option<()> { 
@@ -82,15 +85,69 @@ impl FromIterator<Box<dyn System>> for SystemContainer {
     fn from_iter<T: IntoIterator<Item = Box<dyn System>>>(iter: T) -> Self {
         SystemContainer(iter
             .into_iter()
-            .map(|s| (s.as_any().type_id(), s))
+            .map(|s| (s.type_id(), s))
             .collect())
     }
 }
 
-pub fn topological_sort(systems: &SystemContainer, ids: &mut Vec<TypeId>) {
-    todo!();
+impl Extend<Box<dyn System>> for SystemContainer {
+    fn extend<T: IntoIterator<Item = Box<dyn System>>>(&mut self, iter: T) {
+        self.0.extend(iter
+            .into_iter()
+            .map(|sys| (sys.type_id(), sys)))
+    }
 }
 
-pub fn run_updates(systems: &SystemContainer, schedule: &[TypeId]) {
-    todo!();
+pub type DependencyMap = HashMap<TypeId, HashSet<TypeId>>;
+
+pub fn topological_sort(systems: &SystemContainer) -> Vec<TypeId> {
+    let deps = build_dependency_map(systems);
+    let mut unvisited = HashSet::from_iter(systems.ids());
+    let mut result = Vec::new();
+
+    fn visit(unvisited: &mut HashSet<TypeId>, result: &mut Vec<TypeId>, deps: &DependencyMap, id: TypeId)
+    {
+        if !unvisited.remove(&id) {
+            return;
+        }
+
+        for &dep in deps.get(&id).iter().flat_map(|v| v.iter())
+        {
+            visit(unvisited, result, deps, dep);
+        }
+
+        result.push(id);
+    }
+
+    while let Some(&id) = unvisited.iter().next() {
+        visit(&mut unvisited, &mut result, &deps, id);
+    }
+
+    result
+}
+
+fn build_dependency_map(systems: &SystemContainer) -> DependencyMap {
+    let mut result = HashMap::new();
+    for id in systems.ids() {
+        let sys = systems.get_with_id(id).unwrap();
+        for dep in sys.dependencies() {
+            let (before, after) = match dep.type_ {
+                SystemDependencyType::Before => (id, dep.id),
+                SystemDependencyType::After => (dep.id, id),
+            };
+            result.entry(before).or_insert(HashSet::new()).insert(after);
+        }
+    }
+
+    result
+}
+
+pub fn run_updates(all_systems: &mut SystemContainer, schedule: &[TypeId]) {
+    for &id in schedule {
+        let mut system = all_systems.remove_with_id(id).unwrap();
+        let system_deps = SystemContainer::from_iter(
+            system.dependencies().iter().map(|d| all_systems.remove_with_id(d.id).unwrap()));
+        system.update(&system_deps);
+        all_systems.extend(system_deps.into_systems());
+    }
 }
