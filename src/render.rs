@@ -452,6 +452,22 @@ impl Context {
             .ok_or_else(|| "Failed to get webgl2 context".to_string())?
         ))
     }
+
+    pub fn begin(&self, clear_color: &glam::Vec4) {
+        self.0.clear_color(0.0, 0.0, 0.0, 1.0);
+        self.0.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+        let (width, height) = self.size();
+        self.0.viewport(0, 0, width as i32, height as i32);
+    }
+
+    pub fn size(&self) -> (u32, u32) {
+        let canvas = self.0
+            .canvas()
+            .unwrap()
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .unwrap();
+        (canvas.width(), canvas.height())
+    }
 }
 
 pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result<WebGlTexture, String> {

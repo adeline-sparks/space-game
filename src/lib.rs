@@ -1,4 +1,4 @@
-use glam::{Mat3, Vec2};
+use glam::{Mat3, Vec2, Vec4};
 use render::{VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader, Sampler2D, MeshBuilder, Context};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
@@ -16,23 +16,16 @@ pub fn main() {
     console_log::init().unwrap();
     spawn_local(async {
         dom_content_loaded().await;
-        let context = Context::from_canvas("spacegame").unwrap();
+        let context = Context::from_canvas("space_game").unwrap();
         let texture = load_texture(&context.0, "floors.png").await.unwrap();
         let draw_quad = make_draw_quad(&context.0, &texture);
 
         loop {
             let time = animation_frame().await;
-            context.0.clear_color(0.0, 0.0, 0.0, 1.0);
-            context.0.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-            let canvas = context.0
-                .canvas()
-                .unwrap()
-                .dyn_into::<web_sys::HtmlCanvasElement>()
-                .unwrap();
-            context.0.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
-
+            context.begin(&Vec4::new(0.0, 0.0, 0.0, 1.0));
+            let (width, height) = context.size();
             let projection =
-                Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+                Mat3::from_scale(1.0f32 / Vec2::new(width as f32, height as f32));
             draw_quad(time, &projection);
         }
     });
