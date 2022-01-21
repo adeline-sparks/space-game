@@ -34,13 +34,17 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     let format = ShaderFormat::new(
         vec![
             AttributeFormat {
+                name: "vert_uv".to_string(),
+                type_: ShaderType::Vec2,
+            },
+            AttributeFormat {
                 name: "vert_pos".to_string(),
                 type_: ShaderType::Vec2,
             },
             AttributeFormat {
-                name: "vert_uv".to_string(),
-                type_: ShaderType::Vec2,
-            },
+                name: "vert_extra".to_string(),
+                type_: ShaderType::Float,
+            }
         ],
         vec![
             UniformFormat {
@@ -93,19 +97,23 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     shader.set_uniform(&sampler_loc, Sampler2D(0));
 
     let mut builder = MeshBuilder::new(&shader.format().attributes);
-    builder.push(Vec2::new(-0.5, 0.5));
     builder.push(Vec2::new(0.0, 1.0));
+    builder.push(Vec2::new(-0.5, 0.5));
+    builder.push(42.0);
     builder.end_vert();
-    builder.push(Vec2::new(-0.5, -0.5));
     builder.push(Vec2::new(0.0, 0.0));
+    builder.push(Vec2::new(-0.5, -0.5));
+    builder.push(42.0);
     let v1 = builder.end_vert();
-    builder.push(Vec2::new(0.5, 0.5));
     builder.push(Vec2::new(1.0, 1.0));
+    builder.push(Vec2::new(0.5, 0.5));
+    builder.push(42.0);
     let v2 = builder.end_vert();
     builder.dup_vert(v1);
     builder.dup_vert(v2);
-    builder.push(Vec2::new(0.5, -0.5));
     builder.push(Vec2::new(1.0, 0.0));
+    builder.push(Vec2::new(0.5, -0.5));
+    builder.push(42.0);
     builder.end_vert();
     let mesh = builder.build(&context).expect("failed to build Mesh");
 
