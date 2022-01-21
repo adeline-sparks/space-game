@@ -376,6 +376,47 @@ impl<'a> MeshBuilder<'a> {
 #[derive(Clone)]
 pub struct Texture(WebGlTexture);
 
+impl Texture {
+    pub async fn load(context: &Context, src: &str) -> Result<Texture, String> {
+        let context = &context.0;
+        let image = web_sys::HtmlImageElement::new()
+            .expect("Failed to create HtmlImageElement");
+        image.set_src(src);
+        future_from_callback(|cb| {
+            image.add_event_listener_with_callback("load", &cb)
+                .expect("Failed to register for image load event");
+            image.add_event_listener_with_callback("error", &cb)
+                .expect("Failed to register for image error event"); 
+        }).await;
+        
+        if !image.complete() || image.natural_height() == 0 {
+            return Err("Failed to load image".to_string());
+        }
+    
+        let texture = context.create_texture()
+            .ok_or_else(|| "Failed to `create_texture`".to_string())?;
+        context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
+        context.tex_image_2d_with_u32_and_u32_and_html_image_element(
+            WebGl2RenderingContext::TEXTURE_2D,
+            0,
+            WebGl2RenderingContext::RGBA as i32,
+            WebGl2RenderingContext::RGBA,
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            &image,
+        ).map_err(|_| "Failed to `tex_image_2d`".to_string())?;
+        context.tex_parameteri(
+            WebGl2RenderingContext::TEXTURE_2D, 
+            WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
+            WebGl2RenderingContext::NEAREST as i32);
+        context.tex_parameteri(
+            WebGl2RenderingContext::TEXTURE_2D, 
+            WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
+            WebGl2RenderingContext::NEAREST as i32);
+            
+        Ok(Texture(texture))
+    }
+}
+
 pub trait MeshBuilderValue : UniformValue {
     fn push(&self, bytes: &mut Vec<u8>);
 }
@@ -469,44 +510,6 @@ impl Context {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .unwrap();
         (canvas.width(), canvas.height())
-    }
-
-    pub async fn load_texture(&self, src: &str) -> Result<Texture, String> {
-        let image = web_sys::HtmlImageElement::new()
-            .expect("Failed to create HtmlImageElement");
-        image.set_src(src);
-        future_from_callback(|cb| {
-            image.add_event_listener_with_callback("load", &cb)
-                .expect("Failed to register for image load event");
-            image.add_event_listener_with_callback("error", &cb)
-                .expect("Failed to register for image error event"); 
-        }).await;
-        
-        if !image.complete() || image.natural_height() == 0 {
-            return Err("Failed to load image".to_string());
-        }
-    
-        let texture = self.0.create_texture()
-            .ok_or_else(|| "Failed to `create_texture`".to_string())?;
-        self.0.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
-        self.0.tex_image_2d_with_u32_and_u32_and_html_image_element(
-            WebGl2RenderingContext::TEXTURE_2D,
-            0,
-            WebGl2RenderingContext::RGBA as i32,
-            WebGl2RenderingContext::RGBA,
-            WebGl2RenderingContext::UNSIGNED_BYTE,
-            &image,
-        ).map_err(|_| "Failed to `tex_image_2d`".to_string())?;
-        self.0.tex_parameteri(
-            WebGl2RenderingContext::TEXTURE_2D, 
-            WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
-            WebGl2RenderingContext::NEAREST as i32);
-        self.0.tex_parameteri(
-            WebGl2RenderingContext::TEXTURE_2D, 
-            WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
-            WebGl2RenderingContext::NEAREST as i32);
-            
-        Ok(Texture(texture))
     }
 }
 

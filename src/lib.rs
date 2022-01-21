@@ -16,7 +16,7 @@ pub fn main() {
     spawn_local(async {
         dom_content_loaded().await;
         let context = Context::from_canvas("space_game").unwrap();
-        let texture = context.load_texture("floors.png").await.unwrap();
+        let texture = Texture::load(&context, "floors.png").await.unwrap();
         let draw_quad = make_draw_quad(&context, &texture);
 
         loop {
@@ -55,7 +55,7 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     );
 
     let shader = Shader::compile(
-        context.clone(),
+        context,
         format,
         r##"#version 300 es
         uniform mat3x3 model_view_projection;
