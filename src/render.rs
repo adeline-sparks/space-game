@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, marker::PhantomData};
 
 use js_sys::{Promise, Function, Uint8Array};
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsValue, JsCast};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, WebGlTexture, Window, Document, WebGlUniformLocation,
@@ -433,6 +433,24 @@ impl Mesh {
             as usize;
         let vert_count = (buf_len / stride) as i32;
         Ok(Mesh { vao, vert_count })
+    }
+}
+
+pub struct Context(pub WebGl2RenderingContext);
+
+impl Context {
+    pub fn from_canvas(element_id: &str) -> Result<Self, String> {
+        Ok(Context(expect_document()
+            .get_element_by_id(element_id)
+            .ok_or_else(|| format!("get_element_by_id failed for `{}`", element_id))?
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .map_err(|_| format!("`{}` is not a canvas", element_id))?
+            .get_context("webgl2")
+            .ok()
+            .flatten()
+            .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
+            .ok_or_else(|| "Failed to get webgl2 context".to_string())?
+        ))
     }
 }
 
