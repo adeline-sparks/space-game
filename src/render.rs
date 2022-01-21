@@ -239,6 +239,46 @@ impl Shader {
         context.use_program(Some(&self.program));
         value.set_uniform(context, &uniform.location);
     }
+
+    pub fn render(
+        &self,
+        context: &WebGl2RenderingContext,
+        mesh: &Mesh,
+        textures: &[&WebGlTexture],
+    ) {
+        context.use_program(Some(&self.program));
+        context.bind_vertex_array(Some(&mesh.vao));
+        for (i, texture) in textures.iter().enumerate() {
+            context.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
+            context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
+        }
+
+        context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, mesh.vert_count);
+    }
+}
+
+fn compile_shader(
+    context: &WebGl2RenderingContext,
+    shader_type: u32,
+    source: &str,
+) -> Result<WebGlShader, String> {
+    let shader = context
+        .create_shader(shader_type)
+        .ok_or_else(|| "Failed to create_shader".to_string())?;
+    context.shader_source(&shader, source);
+    context.compile_shader(&shader);
+
+    if context
+        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
+        .as_bool()
+        != Some(true)
+    {
+        return Err(context
+            .get_shader_info_log(&shader)
+            .unwrap_or_else(|| "Failed to `get_shader_info_log`".to_string()));
+    }
+
+    Ok(shader)
 }
 
 pub struct ShaderUniform<T: UniformValue> {
@@ -302,58 +342,47 @@ impl UniformValue for Sampler2D {
     }   
 }
 
-pub fn make_vao(
-    context: &WebGl2RenderingContext,
-    format: &ShaderFormat,
-    buffer: &WebGlBuffer,
-) -> Result<WebGlVertexArrayObject, String> {
-    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(buffer));
-
-    let vao = context
-        .create_vertex_array()
-        .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
-    context.bind_vertex_array(Some(&vao));
-
-    let stride: usize = format.vertex_bytes();
-    let mut offset = 0;
-    for (i, attr) in format.attributes.iter().enumerate() {
-        context.enable_vertex_attrib_array(i as u32);
-        context.vertex_attrib_pointer_with_i32(
-            i as u32,
-            attr.type_.num_components() as i32,
-            attr.type_.webgl_scalar_type(),
-            false,
-            stride as i32,
-            offset as i32,
-        );
-        offset += attr.type_.num_bytes();
-    }
-
-    Ok(vao)
+pub struct Mesh {
+    vao: WebGlVertexArrayObject,
+    vert_count: i32,
 }
 
-fn compile_shader(
-    context: &WebGl2RenderingContext,
-    shader_type: u32,
-    source: &str,
-) -> Result<WebGlShader, String> {
-    let shader = context
-        .create_shader(shader_type)
-        .ok_or_else(|| "Failed to create_shader".to_string())?;
-    context.shader_source(&shader, source);
-    context.compile_shader(&shader);
+impl Mesh {
+    pub fn new(
+        context: &WebGl2RenderingContext, 
+        attributes: &[VertexAttribute], 
+        buffer: &WebGlBuffer,
+    ) -> Result<Mesh, String> {
+        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(buffer));
 
-    if context
-        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
-        .as_bool()
-        != Some(true)
-    {
-        return Err(context
-            .get_shader_info_log(&shader)
-            .unwrap_or_else(|| "Failed to `get_shader_info_log`".to_string()));
+        let vao = context
+            .create_vertex_array()
+            .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
+        context.bind_vertex_array(Some(&vao));
+    
+        let stride: usize = attributes.iter().map(|a|a.type_.num_bytes()).sum();
+        let mut offset = 0;
+        for (i, attr) in attributes.iter().enumerate() {
+            context.enable_vertex_attrib_array(i as u32);
+            context.vertex_attrib_pointer_with_i32(
+                i as u32,
+                attr.type_.num_components() as i32,
+                attr.type_.webgl_scalar_type(),
+                false,
+                stride as i32,
+                offset as i32,
+            );
+            offset += attr.type_.num_bytes();
+        }
+    
+        let buf_len = context
+        .get_buffer_parameter(WebGl2RenderingContext::ARRAY_BUFFER,WebGl2RenderingContext::BUFFER_SIZE)
+            .as_f64()
+            .ok_or_else(|| "get_buffer_parameter did not return float".to_string())?
+            as usize;
+        let vert_count = (buf_len / stride) as i32;
+        Ok(Mesh { vao, vert_count })
     }
-
-    Ok(shader)
 }
 
 pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result<WebGlTexture, String> {
