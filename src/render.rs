@@ -292,6 +292,16 @@ impl UniformValue for i32 {
     }
 }
 
+pub struct Sampler2D(pub u32);
+
+impl UniformValue for Sampler2D {
+    const SHADER_TYPE: ShaderType = ShaderType::Sampler2D;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform1i(Some(&loc), self.0 as i32);
+    }   
+}
+
 pub fn make_vao(
     context: &WebGl2RenderingContext,
     format: &ShaderFormat,

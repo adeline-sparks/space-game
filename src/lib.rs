@@ -1,6 +1,6 @@
 use glam::{Mat3, Vec2};
 use js_sys::Float32Array;
-use render::{make_vao, VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader};
+use render::{make_vao, VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader, Sampler2D};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
@@ -97,6 +97,9 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
 
     let model_view_projection_loc = shader.uniform_location::<glam::Mat3>(context, "model_view_projection")
         .expect("failed to get uniform location of model_view_projection");
+    let sampler_loc = shader.uniform_location::<Sampler2D>(context, "sampler")
+        .expect("failed to get uniform location of sampler");
+    shader.set_uniform(context, &sampler_loc, Sampler2D(0));
 
     let vertices: &[f32] = &[
         -0.5, 0.5, 
@@ -121,7 +124,6 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     let context = context.clone();
     let texture = texture.clone();
     move |time: f64, projection: &Mat3| {
-
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&context, &model_view_projection_loc, *projection * model_view);
 
