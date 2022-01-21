@@ -176,14 +176,6 @@ impl Shader {
             missing_names.remove(info.name().as_str());
         }
     
-        if !missing_names.is_empty() {
-            let mut missing_names = missing_names.into_iter().collect::<Vec<_>>();
-            missing_names.sort();
-            return Err(format!(
-                "Shader is missing these attributes: {}", missing_names.join(", ")
-            ))
-        }
-    
         let num_active_uniforms = context
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_UNIFORMS)
             .as_f64()
@@ -197,7 +189,7 @@ impl Shader {
     
             let uniform = format.uniform_map
                 .get(info.name().as_str())
-                .ok_or_else(|| format!("Sahder requires unknown uniform {}", info.name()))?;
+                .ok_or_else(|| format!("Shader requires unknown uniform {}", info.name()))?;
     
             if info.type_() != uniform.type_.webgl_type() {
                 return Err(format!(
@@ -367,7 +359,7 @@ impl<'a> MeshBuilder<'a> {
     }
 
     pub fn build(&self, context: &Context) -> Result<Mesh, String> {
-        let context = context.0.clone();
+        let context = &context.0;
         assert!(self.attribute_num == 0);
 
         let vao = context
@@ -408,7 +400,7 @@ impl<'a> MeshBuilder<'a> {
             WebGl2RenderingContext::STATIC_DRAW,
         );
 
-        Ok(Mesh { context, vao, vert_count: self.indices.len() as i32 })
+        Ok(Mesh { vao, vert_count: self.indices.len() as i32 })
     }
 }
 
@@ -431,7 +423,6 @@ impl MeshBuilderValue for glam::Vec2 {
 }
 
 pub struct Mesh {
-    context: WebGl2RenderingContext,
     vao: WebGlVertexArrayObject,
     vert_count: i32,
 }
@@ -513,12 +504,15 @@ impl Context {
         (canvas.width(), canvas.height())
     }
 
-    pub fn draw(&self, shader: &Shader, mesh: &Mesh, textures: &[&Texture]) {
+    pub fn draw(&self, shader: &Shader, mesh: &Mesh, textures: &[Option<&Texture>]) {
+        assert!(shader.context == self.0);
         self.0.use_program(Some(&shader.program));
         self.0.bind_vertex_array(Some(&mesh.vao));
         for (i, texture) in textures.iter().enumerate() {
-            self.0.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-            self.0.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
+            if let Some(texture) = texture {
+                self.0.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
+                self.0.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
+            }
         }
 
         self.0.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLES, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);

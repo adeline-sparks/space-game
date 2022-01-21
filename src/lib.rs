@@ -112,6 +112,6 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     move |time: f64, projection: &Mat3| {
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, *projection * model_view);
-        context.draw(&shader, &mesh, &[texture]);
+        context.draw(&shader, &mesh, &[Some(texture)]);
     }
 }
