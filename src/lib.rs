@@ -1,8 +1,7 @@
 use glam::{Mat3, Vec2, Vec4};
-use render::{VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader, Sampler2D, MeshBuilder, Context};
-use wasm_bindgen::{prelude::*, JsCast};
+use render::{AttributeFormat, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, UniformFormat, Shader, Sampler2D, MeshBuilder, Context, Texture};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[allow(unused)]
 mod render;
@@ -17,8 +16,8 @@ pub fn main() {
     spawn_local(async {
         dom_content_loaded().await;
         let context = Context::from_canvas("space_game").unwrap();
-        let texture = load_texture(&context.0, "floors.png").await.unwrap();
-        let draw_quad = make_draw_quad(&context.0, &texture);
+        let texture = context.load_texture("floors.png").await.unwrap();
+        let draw_quad = make_draw_quad(&context, &texture);
 
         loop {
             let time = animation_frame().await;
@@ -31,24 +30,24 @@ pub fn main() {
     });
 }
 
-fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> impl Fn(f64, &Mat3) {
+fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64, &Mat3) + 'a {
     let format = ShaderFormat::new(
         vec![
-            VertexAttribute {
+            AttributeFormat {
                 name: "vert_pos".to_string(),
                 type_: ShaderType::Vec2,
             },
-            VertexAttribute {
+            AttributeFormat {
                 name: "vert_uv".to_string(),
                 type_: ShaderType::Vec2,
             },
         ],
         vec![
-            Uniform {
+            UniformFormat {
                 name: "model_view_projection".to_string(),
                 type_: ShaderType::Mat3x3,
             },
-            Uniform {
+            UniformFormat {
                 name: "sampler".to_string(),
                 type_: ShaderType::Sampler2D,
             }
@@ -56,7 +55,7 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     );
 
     let shader = Shader::compile(
-        &context,
+        context.clone(),
         format,
         r##"#version 300 es
         uniform mat3x3 model_view_projection;
@@ -87,11 +86,11 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     )
     .expect("failed to compile program");
 
-    let model_view_projection_loc = shader.uniform_location::<glam::Mat3>(context, "model_view_projection")
+    let model_view_projection_loc = shader.uniform_location::<glam::Mat3>("model_view_projection")
         .expect("failed to get uniform location of model_view_projection");
-    let sampler_loc = shader.uniform_location::<Sampler2D>(context, "sampler")
+    let sampler_loc = shader.uniform_location::<Sampler2D>("sampler")
         .expect("failed to get uniform location of sampler");
-    shader.set_uniform(context, &sampler_loc, Sampler2D(0));
+    shader.set_uniform(&sampler_loc, Sampler2D(0));
 
     let mut builder = MeshBuilder::new(&shader.format().attributes);
     builder.push(Vec2::new(-0.5, 0.5));
@@ -104,27 +103,9 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
     builder.push(Vec2::new(1.0, 0.0));
     let mesh = builder.build(&context).expect("failed to build Mesh");
 
-    let context = context.clone();
-    let texture = texture.clone();
     move |time: f64, projection: &Mat3| {
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
-        shader.set_uniform(&context, &model_view_projection_loc, *projection * model_view);
-        shader.render(&context, &mesh, &[&texture]);
+        shader.set_uniform(&model_view_projection_loc, *projection * model_view);
+        shader.render(&mesh, &[&texture]);
     }
-}
-
-fn get_context() -> WebGl2RenderingContext {
-    web_sys::window()
-        .expect("no global `window` exists")
-        .document()
-        .expect("no `document` exists")
-        .get_element_by_id("space_game")
-        .expect("no element named `space_game` exists")
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .expect("`space_game` element is not a canvas")
-        .get_context("webgl2")
-        .expect("failed to get webgl2 context")
-        .expect("failed to get webgl2 context")
-        .dyn_into::<WebGl2RenderingContext>()
-        .unwrap()
 }

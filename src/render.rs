@@ -9,19 +9,19 @@ use web_sys::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShaderFormat {
-    pub attributes: Vec<VertexAttribute>,
+    pub attributes: Vec<AttributeFormat>,
     pub attribute_map: HashMap<String, usize>,
-    pub uniform_map: HashMap<String, Uniform>,
+    pub uniform_map: HashMap<String, UniformFormat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VertexAttribute {
+pub struct AttributeFormat {
     pub name: String,
     pub type_: ShaderType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Uniform {
+pub struct UniformFormat {
     pub name: String,
     pub type_: ShaderType,
 }
@@ -37,7 +37,7 @@ pub enum ShaderType {
 }
 
 impl ShaderFormat {
-    pub fn new(attributes: Vec<VertexAttribute>, uniforms: Vec<Uniform>) -> Self {
+    pub fn new(attributes: Vec<AttributeFormat>, uniforms: Vec<UniformFormat>) -> Self {
         let attribute_map = attributes
             .iter()
             .enumerate()
@@ -105,23 +105,25 @@ impl ShaderType {
 }
 
 pub struct Shader {
+    context: WebGl2RenderingContext,
     format: ShaderFormat,
     program: WebGlProgram,
 }
 
 impl Shader {
     pub fn compile(
-        context: &WebGl2RenderingContext,
+        context: &Context,
         format: ShaderFormat,
         vert_source: &str,
         frag_source: &str,
     ) -> Result<Shader, String> {
+        let context = context.0.clone();
         let vert_shader = compile_shader(
-            context, 
+            &context, 
             WebGl2RenderingContext::VERTEX_SHADER, 
             vert_source)?;
         let frag_shader = compile_shader(
-            context, 
+            &context, 
             WebGl2RenderingContext::FRAGMENT_SHADER, 
             frag_source)?;
     
@@ -217,43 +219,38 @@ impl Shader {
             ))
         }
     
-        Ok(Shader { format, program })
+        Ok(Shader { context, format, program })
     }
 
     pub fn format(&self) -> &ShaderFormat {
         &self.format
     }
 
-    pub fn uniform_location<T: UniformValue>(&self, context: &WebGl2RenderingContext, name: &str) -> Result<ShaderUniform<T>, String> {
+    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
         let uniform = self.format.uniform_map.get(name)
             .ok_or_else(|| format!("Unknown uniform `{}`", name))?;
         if uniform.type_ != T::SHADER_TYPE {
             return Err(format!("Type mismatch (requested {:?} actual {:?})", T::SHADER_TYPE, uniform.type_));
         }
 
-        let location = context.get_uniform_location(&self.program, name).expect("Failed to `get_uniform_location`");
-        Ok(ShaderUniform { location, phantom: PhantomData })
+        let location = self.context.get_uniform_location(&self.program, name).expect("Failed to `get_uniform_location`");
+        Ok(Uniform { location, phantom: PhantomData })
     }
 
-    pub fn set_uniform<T: UniformValue>(&self, context: &WebGl2RenderingContext, uniform: &ShaderUniform<T>, value: T) {
-        context.use_program(Some(&self.program));
-        value.set_uniform(context, &uniform.location);
+    pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {
+        self.context.use_program(Some(&self.program));
+        value.set_uniform(&self.context, &uniform.location);
     }
 
-    pub fn render(
-        &self,
-        context: &WebGl2RenderingContext,
-        mesh: &Mesh,
-        textures: &[&WebGlTexture],
-    ) {
-        context.use_program(Some(&self.program));
-        context.bind_vertex_array(Some(&mesh.vao));
+    pub fn render(&self, mesh: &Mesh, textures: &[&Texture]) {
+        self.context.use_program(Some(&self.program));
+        self.context.bind_vertex_array(Some(&mesh.vao));
         for (i, texture) in textures.iter().enumerate() {
-            context.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-            context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
+            self.context.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
+            self.context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
         }
 
-        context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, mesh.vert_count);
+        self.context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, mesh.vert_count);
     }
 }
 
@@ -281,7 +278,7 @@ fn compile_shader(
     Ok(shader)
 }
 
-pub struct ShaderUniform<T: UniformValue> {
+pub struct Uniform<T: UniformValue> {
     location: WebGlUniformLocation,
     phantom: PhantomData<T>,
 }
@@ -343,13 +340,13 @@ impl UniformValue for Sampler2D {
 }
 
 pub struct MeshBuilder<'a> {
-    attributes: &'a [VertexAttribute],
+    attributes: &'a [AttributeFormat],
     bytes: Vec<u8>,
     attribute_num: usize,
 }
 
 impl<'a> MeshBuilder<'a> {
-    pub fn new(attributes: &'a [VertexAttribute]) -> Self {
+    pub fn new(attributes: &'a [AttributeFormat]) -> Self {
         MeshBuilder { attributes, bytes: Vec::new(), attribute_num: 0 }
     }
 
@@ -360,13 +357,13 @@ impl<'a> MeshBuilder<'a> {
         val.push(&mut self.bytes);
     }
 
-    pub fn build(&self, context: &WebGl2RenderingContext) -> Result<Mesh, String> {
+    pub fn build(&self, context: &Context) -> Result<Mesh, String> {
         assert!(self.attribute_num == 0);
 
-        let buffer = context.create_buffer()
+        let buffer = context.0.create_buffer()
             .ok_or_else(|| "failed to create buffer".to_string())?;
-        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
-        context.buffer_data_with_array_buffer_view(
+        context.0.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+        context.0.buffer_data_with_array_buffer_view(
             WebGl2RenderingContext::ARRAY_BUFFER,
             &Uint8Array::from(self.bytes.as_slice()),
             WebGl2RenderingContext::STATIC_DRAW,
@@ -375,6 +372,9 @@ impl<'a> MeshBuilder<'a> {
         Mesh::new(context, self.attributes, &buffer)
     }
 }
+
+#[derive(Clone)]
+pub struct Texture(WebGlTexture);
 
 pub trait MeshBuilderValue : UniformValue {
     fn push(&self, bytes: &mut Vec<u8>);
@@ -394,16 +394,18 @@ impl MeshBuilderValue for glam::Vec2 {
 }
 
 pub struct Mesh {
+    context: WebGl2RenderingContext,
     vao: WebGlVertexArrayObject,
     vert_count: i32,
 }
 
 impl Mesh {
     pub fn new(
-        context: &WebGl2RenderingContext, 
-        attributes: &[VertexAttribute], 
+        context: &Context, 
+        attributes: &[AttributeFormat], 
         buffer: &WebGlBuffer,
     ) -> Result<Mesh, String> {
+        let context = context.0.clone();
         context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(buffer));
 
         let vao = context
@@ -432,11 +434,11 @@ impl Mesh {
             .ok_or_else(|| "get_buffer_parameter did not return float".to_string())?
             as usize;
         let vert_count = (buf_len / stride) as i32;
-        Ok(Mesh { vao, vert_count })
+        Ok(Mesh { context, vao, vert_count })
     }
 }
 
-pub struct Context(pub WebGl2RenderingContext);
+pub struct Context(WebGl2RenderingContext);
 
 impl Context {
     pub fn from_canvas(element_id: &str) -> Result<Self, String> {
@@ -468,44 +470,44 @@ impl Context {
             .unwrap();
         (canvas.width(), canvas.height())
     }
-}
 
-pub async fn load_texture(context: &WebGl2RenderingContext, src: &str) -> Result<WebGlTexture, String> {
-    let image = web_sys::HtmlImageElement::new()
-        .expect("Failed to create HtmlImageElement");
-    image.set_src(src);
-    future_from_callback(|cb| {
-        image.add_event_listener_with_callback("load", &cb)
-            .expect("Failed to register for image load event");
-        image.add_event_listener_with_callback("error", &cb)
-            .expect("Failed to register for image error event"); 
-    }).await;
-    
-    if !image.complete() || image.natural_height() == 0 {
-        return Err("Failed to load image".to_string());
-    }
-
-    let texture = context.create_texture()
-        .ok_or_else(|| "Failed to `create_texture`".to_string())?;
-    context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
-    context.tex_image_2d_with_u32_and_u32_and_html_image_element(
-        WebGl2RenderingContext::TEXTURE_2D,
-        0,
-        WebGl2RenderingContext::RGBA as i32,
-        WebGl2RenderingContext::RGBA,
-        WebGl2RenderingContext::UNSIGNED_BYTE,
-        &image,
-    ).map_err(|_| "Failed to `tex_image_2d`".to_string())?;
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D, 
-        WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
-        WebGl2RenderingContext::NEAREST as i32);
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D, 
-        WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
-        WebGl2RenderingContext::NEAREST as i32);
+    pub async fn load_texture(&self, src: &str) -> Result<Texture, String> {
+        let image = web_sys::HtmlImageElement::new()
+            .expect("Failed to create HtmlImageElement");
+        image.set_src(src);
+        future_from_callback(|cb| {
+            image.add_event_listener_with_callback("load", &cb)
+                .expect("Failed to register for image load event");
+            image.add_event_listener_with_callback("error", &cb)
+                .expect("Failed to register for image error event"); 
+        }).await;
         
-    Ok(texture)
+        if !image.complete() || image.natural_height() == 0 {
+            return Err("Failed to load image".to_string());
+        }
+    
+        let texture = self.0.create_texture()
+            .ok_or_else(|| "Failed to `create_texture`".to_string())?;
+        self.0.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
+        self.0.tex_image_2d_with_u32_and_u32_and_html_image_element(
+            WebGl2RenderingContext::TEXTURE_2D,
+            0,
+            WebGl2RenderingContext::RGBA as i32,
+            WebGl2RenderingContext::RGBA,
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            &image,
+        ).map_err(|_| "Failed to `tex_image_2d`".to_string())?;
+        self.0.tex_parameteri(
+            WebGl2RenderingContext::TEXTURE_2D, 
+            WebGl2RenderingContext::TEXTURE_MIN_FILTER, 
+            WebGl2RenderingContext::NEAREST as i32);
+        self.0.tex_parameteri(
+            WebGl2RenderingContext::TEXTURE_2D, 
+            WebGl2RenderingContext::TEXTURE_MAG_FILTER, 
+            WebGl2RenderingContext::NEAREST as i32);
+            
+        Ok(Texture(texture))
+    }
 }
 
 pub async fn dom_content_loaded() {
