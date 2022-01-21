@@ -241,17 +241,6 @@ impl Shader {
         self.context.use_program(Some(&self.program));
         value.set_uniform(&self.context, &uniform.location);
     }
-
-    pub fn render(&self, mesh: &Mesh, textures: &[&Texture]) {
-        self.context.use_program(Some(&self.program));
-        self.context.bind_vertex_array(Some(&mesh.vao));
-        for (i, texture) in textures.iter().enumerate() {
-            self.context.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-            self.context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
-        }
-
-        self.context.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLES, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);
-    }
 }
 
 fn compile_shader(
@@ -522,6 +511,17 @@ impl Context {
             .dyn_into::<web_sys::HtmlCanvasElement>()
             .unwrap();
         (canvas.width(), canvas.height())
+    }
+
+    pub fn draw(&self, shader: &Shader, mesh: &Mesh, textures: &[&Texture]) {
+        self.0.use_program(Some(&shader.program));
+        self.0.bind_vertex_array(Some(&mesh.vao));
+        for (i, texture) in textures.iter().enumerate() {
+            self.0.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
+            self.0.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
+        }
+
+        self.0.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLES, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);
     }
 }
 
