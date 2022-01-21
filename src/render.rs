@@ -250,7 +250,7 @@ impl Shader {
             self.context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
         }
 
-        self.context.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLE_STRIP, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);
+        self.context.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLES, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);
     }
 }
 

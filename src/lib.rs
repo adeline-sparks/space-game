@@ -98,10 +98,12 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     builder.end_vert();
     builder.push(Vec2::new(-0.5, -0.5));
     builder.push(Vec2::new(0.0, 0.0));
-    builder.end_vert();
+    let v1 = builder.end_vert();
     builder.push(Vec2::new(0.5, 0.5));
     builder.push(Vec2::new(1.0, 1.0));
-    builder.end_vert();
+    let v2 = builder.end_vert();
+    builder.dup_vert(v1);
+    builder.dup_vert(v2);
     builder.push(Vec2::new(0.5, -0.5));
     builder.push(Vec2::new(1.0, 0.0));
     builder.end_vert();
