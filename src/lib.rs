@@ -40,8 +40,8 @@ pub fn main() {
 }
 
 fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> impl Fn(f64, &Mat3) {
-    let format = ShaderFormat {
-        attributes: vec![
+    let format = ShaderFormat::new(
+        vec![
             VertexAttribute {
                 name: "vert_pos".to_string(),
                 type_: ShaderType::Vec2,
@@ -51,7 +51,7 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
                 type_: ShaderType::Vec2,
             },
         ],
-        uniforms: vec![
+        vec![
             Uniform {
                 name: "model_view_projection".to_string(),
                 type_: ShaderType::Mat3x3,
@@ -60,8 +60,8 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
                 name: "sampler".to_string(),
                 type_: ShaderType::Sampler2D,
             }
-        ]
-    };
+        ],
+    );
 
     let shader = Shader::compile(
         &context,
@@ -97,8 +97,6 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
 
     let model_view_projection_loc = shader.uniform_location::<glam::Mat3>(context, "model_view_projection")
         .expect("failed to get uniform location of model_view_projection");
-    let sampler_loc = shader.uniform_location::<i32>(context, "sampler")
-        .expect("failed to get uniform location of sampler");
 
     let vertices: &[f32] = &[
         -0.5, 0.5, 
@@ -130,7 +128,6 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
         context.bind_vertex_array(Some(&vao));
         context.active_texture(WebGl2RenderingContext::TEXTURE0);
         context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
-        shader.set_uniform(&context, &sampler_loc, 0);
         let vert_count = (vertices.len() / 4) as i32;
         context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, vert_count);
     }
