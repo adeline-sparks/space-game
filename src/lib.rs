@@ -1,6 +1,5 @@
 use glam::{Mat3, Vec2};
-use js_sys::Float32Array;
-use render::{VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader, Sampler2D, Mesh};
+use render::{VertexAttribute, ShaderType, ShaderFormat, animation_frame, dom_content_loaded, load_texture, Uniform, Shader, Sampler2D, MeshBuilder};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
@@ -101,26 +100,16 @@ fn make_draw_quad(context: &WebGl2RenderingContext, texture: &WebGlTexture) -> i
         .expect("failed to get uniform location of sampler");
     shader.set_uniform(context, &sampler_loc, Sampler2D(0));
 
-    let vertices: &[f32] = &[
-        -0.5, 0.5, 
-        0.0, 1.0,
-        -0.5, -0.5, 
-        0.0, 0.0,
-        0.5, 0.5, 
-        1.0, 1.0,
-        0.5, -0.5,
-        1.0, 0.0,
-    ];
-    let buffer = context.create_buffer().expect("failed to create buffer");
-    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
-    context.buffer_data_with_array_buffer_view(
-        WebGl2RenderingContext::ARRAY_BUFFER,
-        &Float32Array::from(vertices.as_ref()),
-        WebGl2RenderingContext::STATIC_DRAW,
-    );
-
-    let mesh = Mesh::new(&context, &shader.format().attributes, &buffer)
-        .expect("failed to create mesh");
+    let mut builder = MeshBuilder::new(&shader.format().attributes);
+    builder.push(Vec2::new(-0.5, 0.5));
+    builder.push(Vec2::new(0.0, 1.0));
+    builder.push(Vec2::new(-0.5, -0.5));
+    builder.push(Vec2::new(0.0, 0.0));
+    builder.push(Vec2::new(0.5, 0.5));
+    builder.push(Vec2::new(1.0, 1.0));
+    builder.push(Vec2::new(0.5, -0.5));
+    builder.push(Vec2::new(1.0, 0.0));
+    let mesh = builder.build(&context).expect("failed to build Mesh");
 
     let context = context.clone();
     let texture = texture.clone();

@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, marker::PhantomData};
 
-use js_sys::{Promise, Function};
+use js_sys::{Promise, Function, Uint8Array};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
@@ -340,6 +340,57 @@ impl UniformValue for Sampler2D {
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform1i(Some(&loc), self.0 as i32);
     }   
+}
+
+pub struct MeshBuilder<'a> {
+    attributes: &'a [VertexAttribute],
+    bytes: Vec<u8>,
+    attribute_num: usize,
+}
+
+impl<'a> MeshBuilder<'a> {
+    pub fn new(attributes: &'a [VertexAttribute]) -> Self {
+        MeshBuilder { attributes, bytes: Vec::new(), attribute_num: 0 }
+    }
+
+    pub fn push<V: MeshBuilderValue>(&mut self, val: V) {
+        assert!(self.attributes[self.attribute_num].type_ == V::SHADER_TYPE);
+        self.attribute_num += 1;
+        self.attribute_num %= self.attributes.len();
+        val.push(&mut self.bytes);
+    }
+
+    pub fn build(&self, context: &WebGl2RenderingContext) -> Result<Mesh, String> {
+        assert!(self.attribute_num == 0);
+
+        let buffer = context.create_buffer()
+            .ok_or_else(|| "failed to create buffer".to_string())?;
+        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+        context.buffer_data_with_array_buffer_view(
+            WebGl2RenderingContext::ARRAY_BUFFER,
+            &Uint8Array::from(self.bytes.as_slice()),
+            WebGl2RenderingContext::STATIC_DRAW,
+        );
+    
+        Mesh::new(context, self.attributes, &buffer)
+    }
+}
+
+pub trait MeshBuilderValue : UniformValue {
+    fn push(&self, bytes: &mut Vec<u8>);
+}
+
+impl MeshBuilderValue for f32 {
+    fn push(&self, bytes: &mut Vec<u8>) {
+        bytes.extend(self.to_ne_bytes().iter());
+    }
+}
+
+impl MeshBuilderValue for glam::Vec2 {
+    fn push(&self, bytes: &mut Vec<u8>) {
+        self.x.push(bytes);
+        self.y.push(bytes);
+    }
 }
 
 pub struct Mesh {
