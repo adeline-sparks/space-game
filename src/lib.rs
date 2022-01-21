@@ -95,17 +95,21 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     let mut builder = MeshBuilder::new(&shader.format().attributes);
     builder.push(Vec2::new(-0.5, 0.5));
     builder.push(Vec2::new(0.0, 1.0));
+    builder.end_vert();
     builder.push(Vec2::new(-0.5, -0.5));
     builder.push(Vec2::new(0.0, 0.0));
+    builder.end_vert();
     builder.push(Vec2::new(0.5, 0.5));
     builder.push(Vec2::new(1.0, 1.0));
+    builder.end_vert();
     builder.push(Vec2::new(0.5, -0.5));
     builder.push(Vec2::new(1.0, 0.0));
+    builder.end_vert();
     let mesh = builder.build(&context).expect("failed to build Mesh");
 
     move |time: f64, projection: &Mat3| {
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, *projection * model_view);
-        shader.render(&mesh, &[&texture]);
+        shader.render(&mesh, &[texture]);
     }
 }

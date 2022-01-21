@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, marker::PhantomData};
 
-use js_sys::{Promise, Function, Uint8Array};
+use js_sys::{Promise, Function, Uint8Array, Uint16Array};
 use wasm_bindgen::{JsValue, JsCast};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
@@ -250,7 +250,7 @@ impl Shader {
             self.context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
         }
 
-        self.context.draw_arrays(WebGl2RenderingContext::TRIANGLE_STRIP, 0, mesh.vert_count);
+        self.context.draw_elements_with_i32(WebGl2RenderingContext::TRIANGLE_STRIP, mesh.vert_count, WebGl2RenderingContext::UNSIGNED_SHORT, 0);
     }
 }
 
@@ -342,35 +342,109 @@ impl UniformValue for Sampler2D {
 pub struct MeshBuilder<'a> {
     attributes: &'a [AttributeFormat],
     bytes: Vec<u8>,
+    indices: Vec<u16>,
     attribute_num: usize,
+    vertex_num: usize,
 }
 
 impl<'a> MeshBuilder<'a> {
     pub fn new(attributes: &'a [AttributeFormat]) -> Self {
-        MeshBuilder { attributes, bytes: Vec::new(), attribute_num: 0 }
+        MeshBuilder { 
+            attributes, 
+            bytes: Vec::new(), 
+            indices: Vec::new(), 
+            attribute_num: 0, 
+            vertex_num: 0,
+        }
     }
 
     pub fn push<V: MeshBuilderValue>(&mut self, val: V) {
         assert!(self.attributes[self.attribute_num].type_ == V::SHADER_TYPE);
         self.attribute_num += 1;
-        self.attribute_num %= self.attributes.len();
         val.push(&mut self.bytes);
+    }
+    
+    pub fn end_vert(&mut self) -> u16 {
+        assert!(self.attribute_num == self.attributes.len());
+        let result: u16 = self.vertex_num.try_into().unwrap();
+        self.vertex_num += 1;
+        self.attribute_num = 0;
+        self.indices.push(result);
+        result
+    }
+
+    pub fn dup_vert(&mut self, id: u16) {
+        self.indices.push(id);
     }
 
     pub fn build(&self, context: &Context) -> Result<Mesh, String> {
+        let context = context.0.clone();
         assert!(self.attribute_num == 0);
 
-        let buffer = context.0.create_buffer()
-            .ok_or_else(|| "failed to create buffer".to_string())?;
-        context.0.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
-        context.0.buffer_data_with_array_buffer_view(
+        let vao = context
+            .create_vertex_array()
+            .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
+        context.bind_vertex_array(Some(&vao));
+
+        let vert_buffer = context.create_buffer()
+            .ok_or_else(|| "failed to create vertex buffer".to_string())?;
+        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
+        context.buffer_data_with_array_buffer_view(
             WebGl2RenderingContext::ARRAY_BUFFER,
             &Uint8Array::from(self.bytes.as_slice()),
             WebGl2RenderingContext::STATIC_DRAW,
         );
     
-        Mesh::new(context, self.attributes, &buffer)
+        let stride: usize = self.attributes.iter().map(|a|a.type_.num_bytes()).sum();
+        let mut offset = 0;
+        for (i, attr) in self.attributes.iter().enumerate() {
+            context.enable_vertex_attrib_array(i as u32);
+            context.vertex_attrib_pointer_with_i32(
+                i as u32,
+                attr.type_.num_components() as i32,
+                attr.type_.webgl_scalar_type(),
+                false,
+                stride as i32,
+                offset as i32,
+            );
+            offset += attr.type_.num_bytes();
+        }
+    
+        let index_buffer = context.create_buffer()
+            .ok_or_else(|| "failed to create index buffer".to_string())?;
+        context.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
+        context.buffer_data_with_array_buffer_view(
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+            &Uint16Array::from(self.indices.as_slice()),
+            WebGl2RenderingContext::STATIC_DRAW,
+        );
+
+        Ok(Mesh { context, vao, vert_count: self.indices.len() as i32 })
     }
+}
+
+
+pub trait MeshBuilderValue : UniformValue {
+    fn push(&self, bytes: &mut Vec<u8>);
+}
+
+impl MeshBuilderValue for f32 {
+    fn push(&self, bytes: &mut Vec<u8>) {
+        bytes.extend(self.to_ne_bytes().iter());
+    }
+}
+
+impl MeshBuilderValue for glam::Vec2 {
+    fn push(&self, bytes: &mut Vec<u8>) {
+        self.x.push(bytes);
+        self.y.push(bytes);
+    }
+}
+
+pub struct Mesh {
+    context: WebGl2RenderingContext,
+    vao: WebGlVertexArrayObject,
+    vert_count: i32,
 }
 
 #[derive(Clone)]
@@ -414,68 +488,6 @@ impl Texture {
             WebGl2RenderingContext::NEAREST as i32);
             
         Ok(Texture(texture))
-    }
-}
-
-pub trait MeshBuilderValue : UniformValue {
-    fn push(&self, bytes: &mut Vec<u8>);
-}
-
-impl MeshBuilderValue for f32 {
-    fn push(&self, bytes: &mut Vec<u8>) {
-        bytes.extend(self.to_ne_bytes().iter());
-    }
-}
-
-impl MeshBuilderValue for glam::Vec2 {
-    fn push(&self, bytes: &mut Vec<u8>) {
-        self.x.push(bytes);
-        self.y.push(bytes);
-    }
-}
-
-pub struct Mesh {
-    context: WebGl2RenderingContext,
-    vao: WebGlVertexArrayObject,
-    vert_count: i32,
-}
-
-impl Mesh {
-    pub fn new(
-        context: &Context, 
-        attributes: &[AttributeFormat], 
-        buffer: &WebGlBuffer,
-    ) -> Result<Mesh, String> {
-        let context = context.0.clone();
-        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(buffer));
-
-        let vao = context
-            .create_vertex_array()
-            .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
-        context.bind_vertex_array(Some(&vao));
-    
-        let stride: usize = attributes.iter().map(|a|a.type_.num_bytes()).sum();
-        let mut offset = 0;
-        for (i, attr) in attributes.iter().enumerate() {
-            context.enable_vertex_attrib_array(i as u32);
-            context.vertex_attrib_pointer_with_i32(
-                i as u32,
-                attr.type_.num_components() as i32,
-                attr.type_.webgl_scalar_type(),
-                false,
-                stride as i32,
-                offset as i32,
-            );
-            offset += attr.type_.num_bytes();
-        }
-    
-        let buf_len = context
-        .get_buffer_parameter(WebGl2RenderingContext::ARRAY_BUFFER,WebGl2RenderingContext::BUFFER_SIZE)
-            .as_f64()
-            .ok_or_else(|| "get_buffer_parameter did not return float".to_string())?
-            as usize;
-        let vert_count = (buf_len / stride) as i32;
-        Ok(Mesh { context, vao, vert_count })
     }
 }
 
