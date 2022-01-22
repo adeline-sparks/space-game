@@ -8,7 +8,7 @@ pub struct Texture(WebGlTexture);
 impl Texture {
     pub async fn load(context: &Context, src: &str) -> Result<Texture, String> {
         let image = dom::load_image(src).await?;
-        let gl = &context.0;
+        let gl = &context.gl;
         let texture = gl
             .create_texture()
             .ok_or_else(|| "Failed to `create_texture`".to_string())?;

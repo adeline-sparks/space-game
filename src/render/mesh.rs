@@ -65,7 +65,7 @@ impl<'a> MeshBuilder<'a> {
     }
 
     pub fn build(&self, context: &Context) -> Result<Mesh, String> {
-        let gl = &context.0;
+        let gl = &context.gl;
         assert!(self.attribute_num == 0);
 
         let vao = gl

@@ -65,43 +65,36 @@ impl DataType {
     }
 }
 
-pub struct Context(WebGl2RenderingContext);
+pub struct Context {
+    gl: WebGl2RenderingContext,
+    canvas: HtmlCanvasElement,
+}
 
 impl Context {
     pub fn from_canvas(element_id: &str) -> Result<Self, String> {
-        Ok(Context(
-            dom::get_canvas(element_id)?
-                .get_context("webgl2")
-                .ok()
-                .flatten()
-                .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
-                .ok_or_else(|| "Failed to get webgl2 context".to_string())?,
-        ))
+        let canvas = dom::get_canvas(element_id)?;
+        let gl = canvas.get_context("webgl2")
+            .ok()
+            .flatten()
+            .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
+            .ok_or_else(|| "Failed to get webgl2 context".to_string())?;
+        Ok(Context { gl, canvas })
     }
 
-    pub fn canvas(&self) -> HtmlCanvasElement {
-        self.0
-            .canvas()
-            .unwrap()
-            .dyn_into::<HtmlCanvasElement>()
-            .unwrap()
-    }
-
-    pub fn update_viewport(&self) {
-        let canvas = self.canvas();
-        self.0
-            .viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
+    pub fn canvas(&self) -> &HtmlCanvasElement {
+        &self.canvas
     }
 
     pub fn clear(&self, clear_color: &glam::Vec4) {
-        self.0
+        self.gl
             .clear_color(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-        self.0.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+        self.gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
     }
 
     pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], mesh: &Mesh) {
-        shader.use_(&self.0);
-        Texture::bind(textures, &self.0);
-        mesh.draw(&self.0);
+        self.gl.viewport(0, 0, self.canvas.width() as i32, self.canvas.height() as i32);
+        shader.use_(&self.gl);
+        Texture::bind(textures, &self.gl);
+        mesh.draw(&self.gl);
     }
 }

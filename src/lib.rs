@@ -101,7 +101,6 @@ pub async fn main() {
 
     loop {
         let time = dom::animation_frame().await;
-        context.update_viewport();
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
