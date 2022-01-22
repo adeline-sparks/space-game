@@ -9,30 +9,18 @@ use super::{AttributeFormat, Context, DataType};
 pub struct ShaderFormat {
     pub attributes: Vec<AttributeFormat>,
     pub attribute_map: HashMap<String, usize>,
-    pub uniform_map: HashMap<String, UniformFormat>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UniformFormat {
-    pub name: String,
-    pub type_: DataType,
 }
 
 impl ShaderFormat {
-    pub fn new(attributes: Vec<AttributeFormat>, uniforms: Vec<UniformFormat>) -> Self {
+    pub fn new(attributes: Vec<AttributeFormat>) -> Self {
         let attribute_map = attributes
             .iter()
             .enumerate()
             .map(|(i, attr)| (attr.name.clone(), i))
             .collect();
-        let uniform_map = uniforms
-            .into_iter()
-            .map(|uniform| (uniform.name.clone(), uniform))
-            .collect();
         ShaderFormat {
             attributes,
             attribute_map,
-            uniform_map,
         }
     }
 
@@ -123,47 +111,6 @@ impl Shader {
             missing_names.remove(info.name().as_str());
         }
 
-        let num_active_uniforms = context
-            .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_UNIFORMS)
-            .as_f64()
-            .ok_or_else(|| "Failed to retrieve active uniforms".to_string())?
-            as usize;
-        let mut missing_names = format
-            .uniform_map
-            .keys()
-            .map(|s| s.as_str())
-            .collect::<HashSet<_>>();
-        for i in 0..num_active_uniforms {
-            let info = context
-                .get_active_uniform(&program, i as u32)
-                .ok_or_else(|| format!("Failed to retrieve active uniform {}", i))?;
-
-            let uniform = format
-                .uniform_map
-                .get(info.name().as_str())
-                .ok_or_else(|| format!("Shader requires unknown uniform {}", info.name()))?;
-
-            if info.type_() != uniform.type_.webgl_type() {
-                return Err(format!(
-                    "Data type mismatch on uniform {} (Found {:#04X} expected {:#04X})",
-                    info.name(),
-                    info.type_(),
-                    uniform.type_.webgl_type(),
-                ));
-            }
-
-            missing_names.remove(info.name().as_str());
-        }
-
-        if !missing_names.is_empty() {
-            let mut missing_names = missing_names.into_iter().collect::<Vec<_>>();
-            missing_names.sort();
-            return Err(format!(
-                "Shader is missing these uniforms: {}",
-                missing_names.join(", ")
-            ));
-        }
-
         Ok(Shader {
             context,
             format,
@@ -176,19 +123,6 @@ impl Shader {
     }
 
     pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
-        let uniform = self
-            .format
-            .uniform_map
-            .get(name)
-            .ok_or_else(|| format!("Unknown uniform `{}`", name))?;
-        if uniform.type_ != T::RENDER_TYPE {
-            return Err(format!(
-                "Type mismatch (requested {:?} actual {:?})",
-                T::RENDER_TYPE,
-                uniform.type_
-            ));
-        }
-
         let location = self
             .context
             .get_uniform_location(&self.program, name)

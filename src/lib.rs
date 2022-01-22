@@ -1,7 +1,7 @@
 use glam::{Mat3, Vec2, Vec4};
 use render::{
     animation_frame, dom_content_loaded, AttributeFormat, Context, DataType, MeshBuilder,
-    Sampler2D, Shader, ShaderFormat, Texture, UniformFormat,
+    Sampler2D, Shader, ShaderFormat, Texture,
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -43,16 +43,6 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
             AttributeFormat {
                 name: "vert_extra".to_string(),
                 type_: DataType::Float,
-            },
-        ],
-        vec![
-            UniformFormat {
-                name: "model_view_projection".to_string(),
-                type_: DataType::Mat3x3,
-            },
-            UniformFormat {
-                name: "sampler".to_string(),
-                type_: DataType::Sampler2D,
             },
         ],
     );
