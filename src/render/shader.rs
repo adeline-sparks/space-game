@@ -18,6 +18,28 @@ pub struct UniformFormat {
     pub type_: RenderType,
 }
 
+impl ShaderFormat {
+    pub fn new(attributes: Vec<AttributeFormat>, uniforms: Vec<UniformFormat>) -> Self {
+        let attribute_map = attributes
+            .iter()
+            .enumerate()
+            .map(|(i, attr)| (attr.name.clone(), i))
+            .collect();
+        let uniform_map = uniforms
+            .into_iter()
+            .map(|uniform| (uniform.name.clone(), uniform))
+            .collect();
+        ShaderFormat { attributes, attribute_map, uniform_map }
+    }
+
+    pub fn vertex_bytes(&self) -> usize {
+        self.attributes
+            .iter()
+            .map(|attr| attr.type_.num_bytes())
+            .sum()
+    }
+}
+
 pub struct Shader {
     context: WebGl2RenderingContext,
     format: ShaderFormat,
