@@ -9,7 +9,7 @@ pub struct Mesh {
 }
 
 pub struct MeshBuilder<'a> {
-    attributes: &'a [AttributeFormat],
+    attributes: &'a [Attribute],
     bytes: Vec<u8>,
     indices: Vec<u16>,
     attribute_num: usize,
@@ -17,7 +17,7 @@ pub struct MeshBuilder<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AttributeFormat {
+pub struct Attribute {
     pub name: String,
     pub type_: DataType,
 }
@@ -35,7 +35,7 @@ impl Mesh {
 }
 
 impl<'a> MeshBuilder<'a> {
-    pub fn new(attributes: &'a [AttributeFormat]) -> Self {
+    pub fn new(attributes: &'a [Attribute]) -> Self {
         MeshBuilder {
             attributes,
             bytes: Vec::new(),

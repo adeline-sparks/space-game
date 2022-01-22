@@ -1,7 +1,7 @@
 use glam::{Mat3, Vec2, Vec4};
 use render::{
-    animation_frame, dom_content_loaded, AttributeFormat, Context, DataType, MeshBuilder,
-    Sampler2D, Shader, ShaderFormat, Texture,
+    animation_frame, dom_content_loaded, Attribute, Context, DataType, MeshBuilder,
+    Sampler2D, Shader, Texture,
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -30,26 +30,24 @@ pub fn main() {
 }
 
 fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64, &Mat3) + 'a {
-    let format = ShaderFormat::new(
-        vec![
-            AttributeFormat {
-                name: "vert_uv".to_string(),
-                type_: DataType::Vec2,
-            },
-            AttributeFormat {
-                name: "vert_pos".to_string(),
-                type_: DataType::Vec2,
-            },
-            AttributeFormat {
-                name: "vert_extra".to_string(),
-                type_: DataType::Float,
-            },
-        ],
-    );
+    let attributes = &[
+        Attribute {
+            name: "vert_uv".to_string(),
+            type_: DataType::Vec2,
+        },
+        Attribute {
+            name: "vert_pos".to_string(),
+            type_: DataType::Vec2,
+        },
+        Attribute {
+            name: "vert_extra".to_string(),
+            type_: DataType::Float,
+        },
+    ];
 
     let shader = Shader::compile(
         context,
-        format,
+        attributes,
         r##"#version 300 es
         uniform mat3x3 model_view_projection;
         
@@ -87,7 +85,7 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
         .expect("failed to get uniform location of sampler");
     shader.set_uniform(&sampler_loc, Sampler2D(0));
 
-    let mut builder = MeshBuilder::new(&shader.format().attributes);
+    let mut builder = MeshBuilder::new(attributes);
     builder.push(Vec2::new(0.0, 1.0));
     builder.push(Vec2::new(-0.5, 0.5));
     builder.push(42.0);

@@ -15,8 +15,8 @@ mod shader;
 mod texture;
 
 pub use dom::{animation_frame, dom_content_loaded};
-pub use mesh::{AttributeFormat, Mesh, MeshBuilder};
-pub use shader::{Sampler2D, Shader, ShaderFormat, Uniform};
+pub use mesh::{Attribute, Mesh, MeshBuilder};
+pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

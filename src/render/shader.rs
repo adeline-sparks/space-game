@@ -3,45 +3,17 @@ use std::marker::PhantomData;
 
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::{AttributeFormat, Context, DataType};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShaderFormat {
-    pub attributes: Vec<AttributeFormat>,
-    pub attribute_map: HashMap<String, usize>,
-}
-
-impl ShaderFormat {
-    pub fn new(attributes: Vec<AttributeFormat>) -> Self {
-        let attribute_map = attributes
-            .iter()
-            .enumerate()
-            .map(|(i, attr)| (attr.name.clone(), i))
-            .collect();
-        ShaderFormat {
-            attributes,
-            attribute_map,
-        }
-    }
-
-    pub fn vertex_bytes(&self) -> usize {
-        self.attributes
-            .iter()
-            .map(|attr| attr.type_.num_bytes())
-            .sum()
-    }
-}
+use super::{Attribute, Context, DataType};
 
 pub struct Shader {
     context: WebGl2RenderingContext,
-    format: ShaderFormat,
     program: WebGlProgram,
 }
 
 impl Shader {
     pub fn compile(
         context: &Context,
-        format: ShaderFormat,
+        attributes: &[Attribute],
         vert_source: &str,
         frag_source: &str,
     ) -> Result<Shader, String> {
@@ -59,7 +31,7 @@ impl Shader {
             .ok_or_else(|| "Failed to create_program".to_string())?;
         context.attach_shader(&program, &vert_shader);
         context.attach_shader(&program, &frag_shader);
-        for (i, attr) in format.attributes.iter().enumerate() {
+        for (i, attr) in attributes.iter().enumerate() {
             context.bind_attrib_location(&program, i as u32, &attr.name);
         }
         context.link_program(&program);
@@ -80,24 +52,25 @@ impl Shader {
             .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
             as usize;
 
-        let mut missing_names = format
-            .attribute_map
-            .keys()
-            .map(|s| s.as_str())
+        let attribute_map = attributes
+            .iter()
+            .map(|attr| (attr.name.as_str(), attr))
+            .collect::<HashMap<_, _>>();
+        let mut missing_names = attributes
+            .iter()
+            .map(|attr| attr.name.as_str())
             .collect::<HashSet<_>>();
         for i in 0..num_active_attributes {
             let info = context
                 .get_active_attrib(&program, i as u32)
                 .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
 
-            let attribute_pos =
-                *format
-                    .attribute_map
+            let attribute =
+                *attribute_map
                     .get(info.name().as_str())
                     .ok_or_else(|| {
                         format!("Shader requires unknown vertex attribute {}", info.name())
                     })?;
-            let attribute = &format.attributes[attribute_pos];
 
             if info.type_() != attribute.type_.webgl_type() {
                 return Err(format!(
@@ -113,13 +86,8 @@ impl Shader {
 
         Ok(Shader {
             context,
-            format,
             program,
         })
-    }
-
-    pub fn format(&self) -> &ShaderFormat {
-        &self.format
     }
 
     pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
