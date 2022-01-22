@@ -18,14 +18,19 @@ async fn main() {
     let args = Args::parse();
     assert!(Path::new(&args.space_game_pkg).is_dir());
 
-    // GET /hello/warp => 200 OK with body "Hello, warp!"
-    let hello = 
-        warp::path!("hello" / String)
-        .map(|name| format!("Hello, {}!", name));
+    let ws =
+        warp::path!("ws" / "v1")
+        .and(warp::addr::remote())
+        .and(warp::ws::ws())
+        .map(|addr, ws: warp::ws::Ws| ws.on_upgrade(move |socket| async move {
+            println!("Got connection: {:?}", addr);
+            socket.close().await.unwrap();
+        }));
     let space_game_pkg = 
         warp::fs::dir(args.space_game_pkg);
     let filters = 
-        hello.or(space_game_pkg);
+        space_game_pkg
+        .or(ws);
     warp::serve(filters)
         .run(args.addr)
         .await;
