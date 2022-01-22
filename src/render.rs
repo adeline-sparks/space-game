@@ -20,7 +20,7 @@ pub use shader::{Sampler2D, Shader, ShaderFormat, Uniform, UniformFormat};
 pub use texture::Texture;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum RenderType {
+pub enum DataType {
     Float,
     Vec2,
     Vec3,
@@ -29,7 +29,7 @@ pub enum RenderType {
     Sampler2D,
 }
 
-impl RenderType {
+impl DataType {
     pub fn num_components(self) -> u32 {
         match self {
             Self::Float => 1,

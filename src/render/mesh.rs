@@ -1,7 +1,7 @@
 use js_sys::{Uint16Array, Uint8Array};
 use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject};
 
-use super::{Context, RenderType};
+use super::{Context, DataType};
 
 pub struct Mesh {
     vao: WebGlVertexArrayObject,
@@ -19,7 +19,7 @@ pub struct MeshBuilder<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttributeFormat {
     pub name: String,
-    pub type_: RenderType,
+    pub type_: DataType,
 }
 
 impl Mesh {
@@ -119,13 +119,13 @@ impl<'a> MeshBuilder<'a> {
 }
 
 pub trait AttributeValue {
-    const RENDER_TYPE: RenderType;
+    const RENDER_TYPE: DataType;
 
     fn push(&self, bytes: &mut Vec<u8>);
 }
 
 impl AttributeValue for f32 {
-    const RENDER_TYPE: RenderType = RenderType::Float;
+    const RENDER_TYPE: DataType = DataType::Float;
 
     fn push(&self, bytes: &mut Vec<u8>) {
         bytes.extend(self.to_ne_bytes().iter());
@@ -133,7 +133,7 @@ impl AttributeValue for f32 {
 }
 
 impl AttributeValue for glam::Vec2 {
-    const RENDER_TYPE: RenderType = RenderType::Vec2;
+    const RENDER_TYPE: DataType = DataType::Vec2;
 
     fn push(&self, bytes: &mut Vec<u8>) {
         self.x.push(bytes);

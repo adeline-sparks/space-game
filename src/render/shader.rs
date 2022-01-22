@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::{AttributeFormat, Context, RenderType};
+use super::{AttributeFormat, Context, DataType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShaderFormat {
@@ -15,7 +15,7 @@ pub struct ShaderFormat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UniformFormat {
     pub name: String,
-    pub type_: RenderType,
+    pub type_: DataType,
 }
 
 impl ShaderFormat {
@@ -239,13 +239,13 @@ pub struct Uniform<T: UniformValue> {
 }
 
 pub trait UniformValue {
-    const RENDER_TYPE: RenderType;
+    const RENDER_TYPE: DataType;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation);
 }
 
 impl UniformValue for f32 {
-    const RENDER_TYPE: RenderType = RenderType::Float;
+    const RENDER_TYPE: DataType = DataType::Float;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform1f(Some(&loc), *self);
@@ -253,7 +253,7 @@ impl UniformValue for f32 {
 }
 
 impl UniformValue for glam::Vec2 {
-    const RENDER_TYPE: RenderType = RenderType::Vec2;
+    const RENDER_TYPE: DataType = DataType::Vec2;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform2f(Some(&loc), self.x, self.y);
@@ -261,7 +261,7 @@ impl UniformValue for glam::Vec2 {
 }
 
 impl UniformValue for glam::Vec3 {
-    const RENDER_TYPE: RenderType = RenderType::Vec3;
+    const RENDER_TYPE: DataType = DataType::Vec3;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform3f(Some(&loc), self.x, self.y, self.z);
@@ -269,7 +269,7 @@ impl UniformValue for glam::Vec3 {
 }
 
 impl UniformValue for glam::Mat3 {
-    const RENDER_TYPE: RenderType = RenderType::Mat3x3;
+    const RENDER_TYPE: DataType = DataType::Mat3x3;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
@@ -277,7 +277,7 @@ impl UniformValue for glam::Mat3 {
 }
 
 impl UniformValue for i32 {
-    const RENDER_TYPE: RenderType = RenderType::Int;
+    const RENDER_TYPE: DataType = DataType::Int;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform1i(Some(&loc), *self);
@@ -287,7 +287,7 @@ impl UniformValue for i32 {
 pub struct Sampler2D(pub u32);
 
 impl UniformValue for Sampler2D {
-    const RENDER_TYPE: RenderType = RenderType::Sampler2D;
+    const RENDER_TYPE: DataType = DataType::Sampler2D;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform1i(Some(&loc), self.0 as i32);
