@@ -117,5 +117,4 @@ pub async fn main_net() {
     let ws = open_websocket("ws://localhost:3030/ws/v1").await.unwrap();
     info!("Websocket connected");
     ws.send_with_str("Hello World").unwrap();
-    ws.close().unwrap();
 }

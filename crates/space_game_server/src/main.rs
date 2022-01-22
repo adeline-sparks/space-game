@@ -8,7 +8,7 @@ use warp::Filter;
 #[derive(Parser)]
 #[clap()]
 struct Args {
-    #[clap(long)]
+    #[clap(long, default_value = "../space_game")]
     space_game_pkg: String,
 
     #[clap(long, default_value = "127.0.0.1:3030")]
@@ -24,11 +24,13 @@ async fn main() {
         .and(warp::addr::remote())
         .and(warp::ws::ws())
         .map(|addr, ws: warp::ws::Ws| {
-            ws.on_upgrade(move |socket| async move {
+            ws.on_upgrade(move |mut socket| async move {
                 println!("Got connection: {:?}", addr);
-                let (val, socket) = socket.into_future().await;
-                println!("Got: {:?}", val);
+                while let Some(v) = socket.next().await {
+                    println!("Got: {:?}", v);
+                }
                 socket.close().await.unwrap();
+                println!("Closed");
             })
         });
     let space_game_pkg = warp::fs::dir(args.space_game_pkg);
