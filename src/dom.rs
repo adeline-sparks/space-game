@@ -41,7 +41,7 @@ pub async fn load_image(src: &str) -> Result<HtmlImageElement, String> {
     })
     .await;
 
-    if image.complete() && image.natural_height() == 0 {
+    if image.complete() && image.natural_height() > 0 {
         Ok(image)
     } else {
         Err("Failed to load image".to_string())
