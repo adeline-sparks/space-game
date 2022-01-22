@@ -2,8 +2,13 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use clap::Parser;
+use axum::{
+    extract::ws::{WebSocketUpgrade},
+    routing::{get, get_service},
+    Router, http::StatusCode,
+};
+use tower_http::services::ServeDir;
 use futures_util::StreamExt;
-use warp::Filter;
 
 #[derive(Parser)]
 #[clap()]
@@ -11,7 +16,7 @@ struct Args {
     #[clap(long, default_value = "../space_game")]
     space_game_pkg: String,
 
-    #[clap(long, default_value = "127.0.0.1:3030")]
+    #[clap(long, default_value = "127.0.0.1:8000")]
     addr: SocketAddr,
 }
 
@@ -20,20 +25,23 @@ async fn main() {
     let args = Args::parse();
     assert!(Path::new(&args.space_game_pkg).is_dir());
 
-    let ws = warp::path!("ws" / "v1")
-        .and(warp::addr::remote())
-        .and(warp::ws::ws())
-        .map(|addr, ws: warp::ws::Ws| {
-            ws.on_upgrade(move |mut socket| async move {
-                println!("Got connection: {:?}", addr);
-                while let Some(v) = socket.next().await {
-                    println!("Got: {:?}", v);
-                }
-                socket.close().await.unwrap();
-                println!("Closed");
-            })
+    let handle_ws = get(|wsu: WebSocketUpgrade| async {
+        wsu.on_upgrade(|mut ws| async move {
+            while let Some(val) = ws.next().await {
+                println!("Got: {:?}", val);
+            }
+            println!("Closed");
+        })
+    });
+    let serve_space_game = get_service(ServeDir::new(&args.space_game_pkg))
+        .handle_error(|err| async move { 
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Unhandled internal error: {}", err))
         });
-    let space_game_pkg = warp::fs::dir(args.space_game_pkg);
-    let filters = space_game_pkg.or(ws);
-    warp::serve(filters).run(args.addr).await;
+    let app = Router::new()
+        .route("/ws/v1", handle_ws)
+        .fallback(serve_space_game);
+    axum::Server::bind(&args.addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }
