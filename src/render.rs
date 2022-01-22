@@ -73,7 +73,8 @@ pub struct Context {
 impl Context {
     pub fn from_canvas(element_id: &str) -> Result<Self, String> {
         let canvas = dom::get_canvas(element_id)?;
-        let gl = canvas.get_context("webgl2")
+        let gl = canvas
+            .get_context("webgl2")
             .ok()
             .flatten()
             .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
@@ -92,7 +93,12 @@ impl Context {
     }
 
     pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], mesh: &Mesh) {
-        self.gl.viewport(0, 0, self.canvas.width() as i32, self.canvas.height() as i32);
+        self.gl.viewport(
+            0,
+            0,
+            self.canvas.width() as i32,
+            self.canvas.height() as i32,
+        );
         shader.use_(&self.gl);
         Texture::bind(textures, &self.gl);
         mesh.draw(&self.gl);

@@ -1,9 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::{Attribute, Context, DataType};
+use super::mesh::Attribute;
+use super::{Context, DataType};
 
 pub struct Shader {
     gl: WebGl2RenderingContext,
@@ -52,10 +53,6 @@ impl Shader {
             .iter()
             .map(|attr| (attr.name.as_str(), attr))
             .collect::<HashMap<_, _>>();
-        let mut missing_names = attributes
-            .iter()
-            .map(|attr| attr.name.as_str())
-            .collect::<HashSet<_>>();
         for i in 0..num_active_attributes {
             let info = gl
                 .get_active_attrib(&program, i as u32)
@@ -73,8 +70,6 @@ impl Shader {
                     attribute.type_.webgl_type(),
                 ));
             }
-
-            missing_names.remove(info.name().as_str());
         }
 
         Ok(Shader { gl, program })
