@@ -1,7 +1,7 @@
 use js_sys::{Function, Promise};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Document, HtmlCanvasElement, HtmlImageElement, Window};
+use web_sys::{BinaryType, Document, HtmlCanvasElement, HtmlImageElement, WebSocket, Window};
 
 pub async fn content_loaded() {
     if expect_document().ready_state() != "loading" {
@@ -46,6 +46,23 @@ pub async fn load_image(src: &str) -> Result<HtmlImageElement, String> {
     } else {
         Err("Failed to load image".to_string())
     }
+}
+
+pub async fn open_websocket(url: &str) -> Result<WebSocket, String> {
+    let ws = WebSocket::new(url).map_err(|_| "Failed to create websocket".to_string())?;
+    ws.set_binary_type(BinaryType::Arraybuffer);
+    future_from_callback(|cb| {
+        ws.add_event_listener_with_callback("open", &cb)
+            .expect("Failed to register for websocket connect event");
+        ws.add_event_listener_with_callback("error", &cb)
+            .expect("Failed to register for websocket connect event");
+    })
+    .await;
+
+    if ws.ready_state() == 3 {
+        return Err("Websocket failed to connect".to_string());
+    }
+    Ok(ws)
 }
 
 async fn future_from_callback(mut setup: impl FnMut(Function)) -> JsValue {

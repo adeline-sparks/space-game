@@ -1,4 +1,6 @@
+use dom::open_websocket;
 use glam::{Mat3, Vec2, Vec4};
+use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -10,10 +12,11 @@ mod render;
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(main());
+    spawn_local(main_render());
+    spawn_local(main_net());
 }
 
-pub async fn main() {
+pub async fn main_render() {
     dom::content_loaded().await;
     let context = Context::from_canvas("space_game").unwrap();
 
@@ -107,4 +110,12 @@ pub async fn main() {
         shader.set_uniform(&model_view_projection_loc, projection * model_view);
         context.draw(&shader, &[Some(&texture)], &mesh);
     }
+}
+
+pub async fn main_net() {
+    info!("Creating websocket");
+    let ws = open_websocket("ws://localhost:3030/ws/v1").await.unwrap();
+    info!("Websocket connected");
+    ws.send_with_str("Hello World").unwrap();
+    ws.close().unwrap();
 }

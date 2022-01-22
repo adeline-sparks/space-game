@@ -20,6 +20,7 @@ glam = "0.20"
 [dependencies.web-sys]
 version = "0.3"
 features = [
+  'BinaryType',
   'Document',
   'Element',
   'HtmlCanvasElement',
@@ -31,6 +32,7 @@ features = [
   'WebGlActiveInfo',
   'WebGlShader',
   'WebGlTexture',
-  'WebGlUniformLocation',
+  'WebGlUniformLocation',  
+  'WebSocket',
   'Window',
 ]
