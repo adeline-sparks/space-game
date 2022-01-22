@@ -1,13 +1,6 @@
-use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
+use wasm_bindgen::JsCast;
 
-use js_sys::{Function, Promise, Uint16Array, Uint8Array};
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{
-    Document, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlUniformLocation,
-    WebGlVertexArrayObject, Window,
-};
+use web_sys::WebGl2RenderingContext;
 
 mod dom;
 mod mesh;
@@ -87,7 +80,8 @@ impl Context {
     }
 
     pub fn begin(&self, clear_color: &glam::Vec4) {
-        self.0.clear_color(0.0, 0.0, 0.0, 1.0);
+        self.0
+            .clear_color(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         self.0.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
         let (width, height) = self.size();
         self.0.viewport(0, 0, width as i32, height as i32);

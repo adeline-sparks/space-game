@@ -65,12 +65,9 @@ impl Shader {
                 .get_active_attrib(&program, i as u32)
                 .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
 
-            let attribute =
-                *attribute_map
-                    .get(info.name().as_str())
-                    .ok_or_else(|| {
-                        format!("Shader requires unknown vertex attribute {}", info.name())
-                    })?;
+            let attribute = *attribute_map.get(info.name().as_str()).ok_or_else(|| {
+                format!("Shader requires unknown vertex attribute {}", info.name())
+            })?;
 
             if info.type_() != attribute.type_.webgl_type() {
                 return Err(format!(
@@ -84,10 +81,7 @@ impl Shader {
             missing_names.remove(info.name().as_str());
         }
 
-        Ok(Shader {
-            context,
-            program,
-        })
+        Ok(Shader { context, program })
     }
 
     pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {

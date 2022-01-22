@@ -1,12 +1,11 @@
 use glam::{Mat3, Vec2, Vec4};
 use render::{
-    animation_frame, dom_content_loaded, Attribute, Context, DataType, MeshBuilder,
-    Sampler2D, Shader, Texture,
+    animation_frame, dom_content_loaded, Attribute, Context, DataType, MeshBuilder, Sampler2D,
+    Shader, Texture,
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-#[allow(unused)]
 mod render;
 
 #[wasm_bindgen(start)]
