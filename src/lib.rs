@@ -9,28 +9,18 @@ use wasm_bindgen_futures::spawn_local;
 mod render;
 
 #[wasm_bindgen(start)]
-pub fn main() {
+pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(async {
-        dom_content_loaded().await;
-        let context = Context::from_canvas("space_game").unwrap();
-        let texture = Texture::load(&context, "floors.png").await.unwrap();
-        let draw_quad = make_draw_quad(&context, &texture);
-
-        loop {
-            let time = animation_frame().await;
-            context.update_viewport();
-            context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
-            
-            let canvas = context.canvas();
-            let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
-            draw_quad(time, &projection);
-        }
-    });
+    spawn_local(main());
 }
 
-fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64, &Mat3) + 'a {
+pub async fn main() {
+    dom_content_loaded().await;
+    let context = Context::from_canvas("space_game").unwrap();
+
+    let texture = Texture::load(&context, "floors.png").await.unwrap();
+    
     let attributes = &[
         Attribute {
             name: "vert_uv".to_string(),
@@ -47,7 +37,7 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     ];
 
     let shader = Shader::compile(
-        context,
+        &context,
         attributes,
         r##"#version 300 es
         uniform mat3x3 model_view_projection;
@@ -107,9 +97,16 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     builder.end_vert();
     let mesh = builder.build(&context).expect("failed to build Mesh");
 
-    move |time: f64, projection: &Mat3| {
+    let canvas = context.canvas();
+    let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+
+    loop {
+        let time = animation_frame().await;
+        context.update_viewport();
+        context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
+        
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
-        shader.set_uniform(&model_view_projection_loc, *projection * model_view);
-        context.draw(&shader, &[Some(texture)], &mesh);
+        shader.set_uniform(&model_view_projection_loc, projection * model_view);
+        context.draw(&shader, &[Some(&texture)], &mesh);
     }
 }
