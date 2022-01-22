@@ -1,13 +1,13 @@
 use wasm_bindgen::JsCast;
 
-use web_sys::{WebGl2RenderingContext, HtmlCanvasElement};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-mod dom;
+use crate::dom;
+
 mod mesh;
 mod shader;
 mod texture;
 
-pub use dom::{animation_frame, dom_content_loaded};
 pub use mesh::{Attribute, Mesh, MeshBuilder};
 pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
@@ -89,7 +89,8 @@ impl Context {
 
     pub fn update_viewport(&self) {
         let canvas = self.canvas();
-        self.0.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
+        self.0
+            .viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
     }
 
     pub fn clear(&self, clear_color: &glam::Vec4) {

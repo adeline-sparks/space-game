@@ -1,11 +1,9 @@
 use glam::{Mat3, Vec2, Vec4};
-use render::{
-    animation_frame, dom_content_loaded, Attribute, Context, DataType, MeshBuilder, Sampler2D,
-    Shader, Texture,
-};
+use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
+mod dom;
 mod render;
 
 #[wasm_bindgen(start)]
@@ -16,11 +14,11 @@ pub fn start() {
 }
 
 pub async fn main() {
-    dom_content_loaded().await;
+    dom::content_loaded().await;
     let context = Context::from_canvas("space_game").unwrap();
 
     let texture = Texture::load(&context, "floors.png").await.unwrap();
-    
+
     let attributes = &[
         Attribute {
             name: "vert_uv".to_string(),
@@ -98,13 +96,14 @@ pub async fn main() {
     let mesh = builder.build(&context).expect("failed to build Mesh");
 
     let canvas = context.canvas();
-    let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
+    let projection =
+        Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
 
     loop {
-        let time = animation_frame().await;
+        let time = dom::animation_frame().await;
         context.update_viewport();
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
-        
+
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, projection * model_view);
         context.draw(&shader, &[Some(&texture)], &mesh);

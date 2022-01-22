@@ -1,4 +1,5 @@
-use super::{dom, Context};
+use super::Context;
+use crate::dom;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
@@ -12,16 +13,15 @@ impl Texture {
             .create_texture()
             .ok_or_else(|| "Failed to `create_texture`".to_string())?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
-        gl
-            .tex_image_2d_with_u32_and_u32_and_html_image_element(
-                WebGl2RenderingContext::TEXTURE_2D,
-                0,
-                WebGl2RenderingContext::RGBA as i32,
-                WebGl2RenderingContext::RGBA,
-                WebGl2RenderingContext::UNSIGNED_BYTE,
-                &image,
-            )
-            .map_err(|_| "Failed to `tex_image_2d`".to_string())?;
+        gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
+            WebGl2RenderingContext::TEXTURE_2D,
+            0,
+            WebGl2RenderingContext::RGBA as i32,
+            WebGl2RenderingContext::RGBA,
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            &image,
+        )
+        .map_err(|_| "Failed to `tex_image_2d`".to_string())?;
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
             WebGl2RenderingContext::TEXTURE_MIN_FILTER,

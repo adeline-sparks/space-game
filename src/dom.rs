@@ -3,7 +3,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Document, HtmlCanvasElement, HtmlImageElement, Window};
 
-pub async fn dom_content_loaded() {
+pub async fn content_loaded() {
     if expect_document().ready_state() != "loading" {
         return;
     }

@@ -18,13 +18,9 @@ impl Shader {
         frag_source: &str,
     ) -> Result<Shader, String> {
         let gl = context.0.clone();
-        let vert_shader =
-            compile_shader(&gl, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
-        let frag_shader = compile_shader(
-            &gl,
-            WebGl2RenderingContext::FRAGMENT_SHADER,
-            frag_source,
-        )?;
+        let vert_shader = compile_shader(&gl, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
+        let frag_shader =
+            compile_shader(&gl, WebGl2RenderingContext::FRAGMENT_SHADER, frag_source)?;
 
         let program = gl
             .create_program()
