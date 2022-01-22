@@ -1,20 +1,22 @@
-use std::{collections::{HashMap, HashSet}, marker::PhantomData};
+use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
-use js_sys::{Promise, Function, Uint8Array, Uint16Array};
-use wasm_bindgen::{JsValue, JsCast};
+use js_sys::{Function, Promise, Uint16Array, Uint8Array};
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlVertexArrayObject, Window, Document, WebGlUniformLocation,
+    Document, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlUniformLocation,
+    WebGlVertexArrayObject, Window,
 };
 
+mod dom;
 mod mesh;
 mod shader;
-mod dom;
 mod texture;
 
+pub use dom::{animation_frame, dom_content_loaded};
 pub use mesh::{AttributeFormat, Mesh, MeshBuilder};
-pub use shader::{Shader, ShaderFormat, UniformFormat, Uniform, Sampler2D};
-pub use dom::{dom_content_loaded, animation_frame};
+pub use shader::{Sampler2D, Shader, ShaderFormat, Uniform, UniformFormat};
 pub use texture::Texture;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -52,10 +54,7 @@ impl RenderType {
 
     pub fn webgl_scalar_type(self) -> u32 {
         match self {
-            Self::Float |
-            Self::Vec2 |
-            Self::Vec3 |
-            Self::Mat3x3 => WebGl2RenderingContext::FLOAT,
+            Self::Float | Self::Vec2 | Self::Vec3 | Self::Mat3x3 => WebGl2RenderingContext::FLOAT,
             Self::Int => WebGl2RenderingContext::INT,
             Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
         }
@@ -79,11 +78,11 @@ impl Context {
     pub fn from_canvas(element_id: &str) -> Result<Self, String> {
         Ok(Context(
             dom::get_canvas(element_id)?
-            .get_context("webgl2")
-            .ok()
-            .flatten()
-            .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
-            .ok_or_else(|| "Failed to get webgl2 context".to_string())?
+                .get_context("webgl2")
+                .ok()
+                .flatten()
+                .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
+                .ok_or_else(|| "Failed to get webgl2 context".to_string())?,
         ))
     }
 
@@ -95,7 +94,8 @@ impl Context {
     }
 
     pub fn size(&self) -> (u32, u32) {
-        let canvas = self.0
+        let canvas = self
+            .0
             .canvas()
             .unwrap()
             .dyn_into::<web_sys::HtmlCanvasElement>()

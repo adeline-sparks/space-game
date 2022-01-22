@@ -1,5 +1,8 @@
 use glam::{Mat3, Vec2, Vec4};
-use render::{AttributeFormat, RenderType, ShaderFormat, animation_frame, dom_content_loaded, UniformFormat, Shader, Sampler2D, MeshBuilder, Context, Texture};
+use render::{
+    animation_frame, dom_content_loaded, AttributeFormat, Context, MeshBuilder, RenderType,
+    Sampler2D, Shader, ShaderFormat, Texture, UniformFormat,
+};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
@@ -20,8 +23,7 @@ pub fn main() {
             let time = animation_frame().await;
             context.begin(&Vec4::new(0.0, 0.0, 0.0, 1.0));
             let (width, height) = context.size();
-            let projection =
-                Mat3::from_scale(1.0f32 / Vec2::new(width as f32, height as f32));
+            let projection = Mat3::from_scale(1.0f32 / Vec2::new(width as f32, height as f32));
             draw_quad(time, &projection);
         }
     });
@@ -41,7 +43,7 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
             AttributeFormat {
                 name: "vert_extra".to_string(),
                 type_: RenderType::Float,
-            }
+            },
         ],
         vec![
             UniformFormat {
@@ -51,7 +53,7 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
             UniformFormat {
                 name: "sampler".to_string(),
                 type_: RenderType::Sampler2D,
-            }
+            },
         ],
     );
 
@@ -87,9 +89,11 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     )
     .expect("failed to compile program");
 
-    let model_view_projection_loc = shader.uniform_location::<glam::Mat3>("model_view_projection")
+    let model_view_projection_loc = shader
+        .uniform_location::<glam::Mat3>("model_view_projection")
         .expect("failed to get uniform location of model_view_projection");
-    let sampler_loc = shader.uniform_location::<Sampler2D>("sampler")
+    let sampler_loc = shader
+        .uniform_location::<Sampler2D>("sampler")
         .expect("failed to get uniform location of sampler");
     shader.set_uniform(&sampler_loc, Sampler2D(0));
 

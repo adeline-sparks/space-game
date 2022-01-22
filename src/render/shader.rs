@@ -1,9 +1,9 @@
-use std::{marker::PhantomData, collections::{HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
-use web_sys::{WebGl2RenderingContext, WebGlShader, WebGlUniformLocation, WebGlProgram};
+use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::{Context, AttributeFormat, RenderType};
-
+use super::{AttributeFormat, Context, RenderType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShaderFormat {
@@ -29,7 +29,11 @@ impl ShaderFormat {
             .into_iter()
             .map(|uniform| (uniform.name.clone(), uniform))
             .collect();
-        ShaderFormat { attributes, attribute_map, uniform_map }
+        ShaderFormat {
+            attributes,
+            attribute_map,
+            uniform_map,
+        }
     }
 
     pub fn vertex_bytes(&self) -> usize {
@@ -54,15 +58,14 @@ impl Shader {
         frag_source: &str,
     ) -> Result<Shader, String> {
         let context = context.0.clone();
-        let vert_shader = compile_shader(
-            &context, 
-            WebGl2RenderingContext::VERTEX_SHADER, 
-            vert_source)?;
+        let vert_shader =
+            compile_shader(&context, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
         let frag_shader = compile_shader(
-            &context, 
-            WebGl2RenderingContext::FRAGMENT_SHADER, 
-            frag_source)?;
-    
+            &context,
+            WebGl2RenderingContext::FRAGMENT_SHADER,
+            frag_source,
+        )?;
+
         let program = context
             .create_program()
             .ok_or_else(|| "Failed to create_program".to_string())?;
@@ -72,7 +75,7 @@ impl Shader {
             context.bind_attrib_location(&program, i as u32, &attr.name);
         }
         context.link_program(&program);
-    
+
         if context
             .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
             .as_bool()
@@ -82,72 +85,90 @@ impl Shader {
                 .get_program_info_log(&program)
                 .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
         }
-    
+
         let num_active_attributes = context
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
             .as_f64()
             .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
             as usize;
 
-        let mut missing_names = format.attribute_map.keys().map(|s| s.as_str()).collect::<HashSet<_>>();
+        let mut missing_names = format
+            .attribute_map
+            .keys()
+            .map(|s| s.as_str())
+            .collect::<HashSet<_>>();
         for i in 0..num_active_attributes {
             let info = context
                 .get_active_attrib(&program, i as u32)
                 .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
-    
-            let attribute_pos = *format.attribute_map
-                .get(info.name().as_str())
-                .ok_or_else(|| format!("Shader requires unknown vertex attribute {}", info.name()))?;
+
+            let attribute_pos =
+                *format
+                    .attribute_map
+                    .get(info.name().as_str())
+                    .ok_or_else(|| {
+                        format!("Shader requires unknown vertex attribute {}", info.name())
+                    })?;
             let attribute = &format.attributes[attribute_pos];
-            
+
             if info.type_() != attribute.type_.webgl_type() {
                 return Err(format!(
                     "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
                     info.name(),
                     info.type_(),
                     attribute.type_.webgl_type(),
-                ))
+                ));
             }
 
             missing_names.remove(info.name().as_str());
         }
-    
+
         let num_active_uniforms = context
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_UNIFORMS)
             .as_f64()
             .ok_or_else(|| "Failed to retrieve active uniforms".to_string())?
             as usize;
-        let mut missing_names = format.uniform_map.keys().map(|s| s.as_str()).collect::<HashSet<_>>();
+        let mut missing_names = format
+            .uniform_map
+            .keys()
+            .map(|s| s.as_str())
+            .collect::<HashSet<_>>();
         for i in 0..num_active_uniforms {
             let info = context
                 .get_active_uniform(&program, i as u32)
                 .ok_or_else(|| format!("Failed to retrieve active uniform {}", i))?;
-    
-            let uniform = format.uniform_map
+
+            let uniform = format
+                .uniform_map
                 .get(info.name().as_str())
                 .ok_or_else(|| format!("Shader requires unknown uniform {}", info.name()))?;
-    
+
             if info.type_() != uniform.type_.webgl_type() {
                 return Err(format!(
                     "Data type mismatch on uniform {} (Found {:#04X} expected {:#04X})",
                     info.name(),
                     info.type_(),
                     uniform.type_.webgl_type(),
-                ))            
+                ));
             }
 
             missing_names.remove(info.name().as_str());
-        }   
-        
+        }
+
         if !missing_names.is_empty() {
             let mut missing_names = missing_names.into_iter().collect::<Vec<_>>();
             missing_names.sort();
             return Err(format!(
-                "Shader is missing these uniforms: {}", missing_names.join(", ")
-            ))
+                "Shader is missing these uniforms: {}",
+                missing_names.join(", ")
+            ));
         }
-    
-        Ok(Shader { context, format, program })
+
+        Ok(Shader {
+            context,
+            format,
+            program,
+        })
     }
 
     pub fn format(&self) -> &ShaderFormat {
@@ -155,14 +176,27 @@ impl Shader {
     }
 
     pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
-        let uniform = self.format.uniform_map.get(name)
+        let uniform = self
+            .format
+            .uniform_map
+            .get(name)
             .ok_or_else(|| format!("Unknown uniform `{}`", name))?;
         if uniform.type_ != T::RENDER_TYPE {
-            return Err(format!("Type mismatch (requested {:?} actual {:?})", T::RENDER_TYPE, uniform.type_));
+            return Err(format!(
+                "Type mismatch (requested {:?} actual {:?})",
+                T::RENDER_TYPE,
+                uniform.type_
+            ));
         }
 
-        let location = self.context.get_uniform_location(&self.program, name).expect("Failed to `get_uniform_location`");
-        Ok(Uniform { location, phantom: PhantomData })
+        let location = self
+            .context
+            .get_uniform_location(&self.program, name)
+            .expect("Failed to `get_uniform_location`");
+        Ok(Uniform {
+            location,
+            phantom: PhantomData,
+        })
     }
 
     pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {
@@ -257,5 +291,5 @@ impl UniformValue for Sampler2D {
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform1i(Some(&loc), self.0 as i32);
-    }   
+    }
 }
