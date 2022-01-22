@@ -20,9 +20,11 @@ pub fn main() {
 
         loop {
             let time = animation_frame().await;
-            context.begin(&Vec4::new(0.0, 0.0, 0.0, 1.0));
-            let (width, height) = context.size();
-            let projection = Mat3::from_scale(1.0f32 / Vec2::new(width as f32, height as f32));
+            context.update_viewport();
+            context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
+            
+            let canvas = context.canvas();
+            let projection = Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
             draw_quad(time, &projection);
         }
     });
@@ -108,6 +110,6 @@ fn make_draw_quad<'a>(context: &'a Context, texture: &'a Texture) -> impl Fn(f64
     move |time: f64, projection: &Mat3| {
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, *projection * model_view);
-        context.draw(&shader, &mesh, &[Some(texture)]);
+        context.draw(&shader, &[Some(texture)], &mesh);
     }
 }

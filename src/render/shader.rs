@@ -6,7 +6,7 @@ use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLoc
 use super::{Attribute, Context, DataType};
 
 pub struct Shader {
-    context: WebGl2RenderingContext,
+    gl: WebGl2RenderingContext,
     program: WebGlProgram,
 }
 
@@ -17,36 +17,36 @@ impl Shader {
         vert_source: &str,
         frag_source: &str,
     ) -> Result<Shader, String> {
-        let context = context.0.clone();
+        let gl = context.0.clone();
         let vert_shader =
-            compile_shader(&context, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
+            compile_shader(&gl, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
         let frag_shader = compile_shader(
-            &context,
+            &gl,
             WebGl2RenderingContext::FRAGMENT_SHADER,
             frag_source,
         )?;
 
-        let program = context
+        let program = gl
             .create_program()
             .ok_or_else(|| "Failed to create_program".to_string())?;
-        context.attach_shader(&program, &vert_shader);
-        context.attach_shader(&program, &frag_shader);
+        gl.attach_shader(&program, &vert_shader);
+        gl.attach_shader(&program, &frag_shader);
         for (i, attr) in attributes.iter().enumerate() {
-            context.bind_attrib_location(&program, i as u32, &attr.name);
+            gl.bind_attrib_location(&program, i as u32, &attr.name);
         }
-        context.link_program(&program);
+        gl.link_program(&program);
 
-        if context
+        if gl
             .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
             .as_bool()
             != Some(true)
         {
-            return Err(context
+            return Err(gl
                 .get_program_info_log(&program)
                 .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
         }
 
-        let num_active_attributes = context
+        let num_active_attributes = gl
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
             .as_f64()
             .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
@@ -61,7 +61,7 @@ impl Shader {
             .map(|attr| attr.name.as_str())
             .collect::<HashSet<_>>();
         for i in 0..num_active_attributes {
-            let info = context
+            let info = gl
                 .get_active_attrib(&program, i as u32)
                 .ok_or_else(|| format!("Failed to retrieve active attribute {}", i))?;
 
@@ -81,12 +81,12 @@ impl Shader {
             missing_names.remove(info.name().as_str());
         }
 
-        Ok(Shader { context, program })
+        Ok(Shader { gl, program })
     }
 
     pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
         let location = self
-            .context
+            .gl
             .get_uniform_location(&self.program, name)
             .expect("Failed to `get_uniform_location`");
         Ok(Uniform {
@@ -96,12 +96,12 @@ impl Shader {
     }
 
     pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {
-        self.context.use_program(Some(&self.program));
-        value.set_uniform(&self.context, &uniform.location);
+        self.gl.use_program(Some(&self.program));
+        value.set_uniform(&self.gl, &uniform.location);
     }
 
-    pub(super) fn use_(&self, context: &WebGl2RenderingContext) {
-        context.use_program(Some(&self.program));
+    pub(super) fn use_(&self, gl: &WebGl2RenderingContext) {
+        gl.use_program(Some(&self.program));
     }
 }
 

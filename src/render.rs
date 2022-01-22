@@ -1,6 +1,6 @@
 use wasm_bindgen::JsCast;
 
-use web_sys::WebGl2RenderingContext;
+use web_sys::{WebGl2RenderingContext, HtmlCanvasElement};
 
 mod dom;
 mod mesh;
@@ -79,28 +79,28 @@ impl Context {
         ))
     }
 
-    pub fn begin(&self, clear_color: &glam::Vec4) {
+    pub fn canvas(&self) -> HtmlCanvasElement {
+        self.0
+            .canvas()
+            .unwrap()
+            .dyn_into::<HtmlCanvasElement>()
+            .unwrap()
+    }
+
+    pub fn update_viewport(&self) {
+        let canvas = self.canvas();
+        self.0.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
+    }
+
+    pub fn clear(&self, clear_color: &glam::Vec4) {
         self.0
             .clear_color(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         self.0.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-        let (width, height) = self.size();
-        self.0.viewport(0, 0, width as i32, height as i32);
     }
 
-    pub fn size(&self) -> (u32, u32) {
-        let canvas = self
-            .0
-            .canvas()
-            .unwrap()
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .unwrap();
-        (canvas.width(), canvas.height())
-    }
-
-    pub fn draw(&self, shader: &Shader, mesh: &Mesh, textures: &[Option<&texture::Texture>]) {
+    pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], mesh: &Mesh) {
         shader.use_(&self.0);
         Texture::bind(textures, &self.0);
-
         mesh.draw(&self.0);
     }
 }

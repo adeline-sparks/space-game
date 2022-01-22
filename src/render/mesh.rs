@@ -23,9 +23,9 @@ pub struct Attribute {
 }
 
 impl Mesh {
-    pub(super) fn draw(&self, context: &WebGl2RenderingContext) {
-        context.bind_vertex_array(Some(&self.vao));
-        context.draw_elements_with_i32(
+    pub(super) fn draw(&self, gl: &WebGl2RenderingContext) {
+        gl.bind_vertex_array(Some(&self.vao));
+        gl.draw_elements_with_i32(
             WebGl2RenderingContext::TRIANGLES,
             self.vert_count,
             WebGl2RenderingContext::UNSIGNED_SHORT,
@@ -65,19 +65,19 @@ impl<'a> MeshBuilder<'a> {
     }
 
     pub fn build(&self, context: &Context) -> Result<Mesh, String> {
-        let context = &context.0;
+        let gl = &context.0;
         assert!(self.attribute_num == 0);
 
-        let vao = context
+        let vao = gl
             .create_vertex_array()
             .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
-        context.bind_vertex_array(Some(&vao));
+        gl.bind_vertex_array(Some(&vao));
 
-        let vert_buffer = context
+        let vert_buffer = gl
             .create_buffer()
             .ok_or_else(|| "failed to create vertex buffer".to_string())?;
-        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
-        context.buffer_data_with_array_buffer_view(
+        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
+        gl.buffer_data_with_array_buffer_view(
             WebGl2RenderingContext::ARRAY_BUFFER,
             &Uint8Array::from(self.bytes.as_slice()),
             WebGl2RenderingContext::STATIC_DRAW,
@@ -86,8 +86,8 @@ impl<'a> MeshBuilder<'a> {
         let stride: usize = self.attributes.iter().map(|a| a.type_.num_bytes()).sum();
         let mut offset = 0;
         for (i, attr) in self.attributes.iter().enumerate() {
-            context.enable_vertex_attrib_array(i as u32);
-            context.vertex_attrib_pointer_with_i32(
+            gl.enable_vertex_attrib_array(i as u32);
+            gl.vertex_attrib_pointer_with_i32(
                 i as u32,
                 attr.type_.num_components() as i32,
                 attr.type_.webgl_scalar_type(),
@@ -98,14 +98,14 @@ impl<'a> MeshBuilder<'a> {
             offset += attr.type_.num_bytes();
         }
 
-        let index_buffer = context
+        let index_buffer = gl
             .create_buffer()
             .ok_or_else(|| "failed to create index buffer".to_string())?;
-        context.bind_buffer(
+        gl.bind_buffer(
             WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
             Some(&index_buffer),
         );
-        context.buffer_data_with_array_buffer_view(
+        gl.buffer_data_with_array_buffer_view(
             WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
             &Uint16Array::from(self.indices.as_slice()),
             WebGl2RenderingContext::STATIC_DRAW,
