@@ -3,4 +3,5 @@
 members = [
     "crates/space_game",
     "crates/space_game_server",
+    "crates/space_game_core",
 ]
