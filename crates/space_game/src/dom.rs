@@ -1,74 +1,60 @@
+use std::future::Future;
+
 use js_sys::{Function, Promise};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{BinaryType, Document, HtmlCanvasElement, HtmlImageElement, WebSocket, Window};
+use web_sys::{BinaryType, Document, HtmlCanvasElement, HtmlImageElement, WebSocket, Window, EventTarget};
+use futures::{select, FutureExt};
 
-pub async fn content_loaded() {
-    if expect_document().ready_state() != "loading" {
-        return;
+pub async fn content_loaded() -> Result<(), JsValue> {
+    if expect_document().ready_state() == "loading" {
+        add_event_future(&expect_window(), "DOMContentLoaded")?.await;
     }
 
-    future_from_callback(|resolve| {
-        expect_window()
-            .add_event_listener_with_callback("DOMContentLoaded", &resolve)
-            .expect("Failed to add DOMContentLoaded event handler");
-    })
-    .await;
+    Ok(())
 }
 
-pub async fn animation_frame() -> f64 {
-    future_from_callback(|cb| {
-        expect_window()
-            .request_animation_frame(&cb)
-            .expect("Failed to `request_animation_frame`");
-    })
-    .await
-    .as_f64()
-    .expect("request_animation_frame did not provide a float")
-        / 1e3
+pub async fn animation_frame() -> Result<f64, JsValue> {
+    let (cb, future) = make_callback_future();
+    expect_window().request_animation_frame(&cb)?;
+
+    future.await.as_f64().ok_or("Failed to cast timestamp to f64".into())
 }
 
-pub async fn load_image(src: &str) -> Result<HtmlImageElement, String> {
-    let image = web_sys::HtmlImageElement::new().expect("Failed to create HtmlImageElement");
+pub async fn load_image(src: &str) -> Result<HtmlImageElement, JsValue> {
+    let image = web_sys::HtmlImageElement::new()?;
     image.set_src(src);
-    future_from_callback(|cb| {
-        image
-            .add_event_listener_with_callback("load", &cb)
-            .expect("Failed to register for image load event");
-        image
-            .add_event_listener_with_callback("error", &cb)
-            .expect("Failed to register for image error event");
-    })
-    .await;
 
-    if image.complete() && image.natural_height() > 0 {
-        Ok(image)
-    } else {
-        Err("Failed to load image".to_string())
+    select! { 
+        _ = add_event_future(&image, "load")?.fuse() => Ok(image),
+        val = add_event_future(&image, "error")?.fuse() => Err(val),
     }
 }
 
-pub async fn open_websocket(url: &str) -> Result<WebSocket, String> {
+pub async fn open_websocket(url: &str) -> Result<WebSocket, JsValue> {
     let ws = WebSocket::new(url).map_err(|_| "Failed to create websocket".to_string())?;
     ws.set_binary_type(BinaryType::Arraybuffer);
-    future_from_callback(|cb| {
-        ws.add_event_listener_with_callback("open", &cb)
-            .expect("Failed to register for websocket connect event");
-        ws.add_event_listener_with_callback("error", &cb)
-            .expect("Failed to register for websocket connect event");
-    })
-    .await;
 
-    if ws.ready_state() == 3 {
-        return Err("Websocket failed to connect".to_string());
+    select! {
+        _ = add_event_future(&ws, "open")?.fuse() => Ok(ws),
+        val = add_event_future(&ws, "error")?.fuse() => Err(val),
     }
-    Ok(ws)
 }
 
-async fn future_from_callback(mut setup: impl FnMut(Function)) -> JsValue {
-    JsFuture::from(Promise::new(&mut |resolve, _reject| setup(resolve)))
-        .await
-        .expect("Promise did not resolve")
+pub fn add_event_future(target: &EventTarget, type_: &str) -> Result<impl Future<Output=JsValue>, JsValue> {
+    let (cb, future) = make_callback_future();
+    target.add_event_listener_with_callback(type_, &cb)?;
+    Ok(future)
+}
+
+fn make_callback_future() -> (Function, impl Future<Output=JsValue>) {
+    let mut resolve_opt = None;
+    let future = 
+        JsFuture::from(Promise::new(&mut |resolve, _reject| {
+            resolve_opt = Some(resolve);
+        }));
+
+    (resolve_opt.unwrap(), async { future.await.unwrap() })
 }
 
 pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, String> {

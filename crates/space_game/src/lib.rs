@@ -1,8 +1,9 @@
 use dom::open_websocket;
+use futures::{try_join};
 use glam::{Mat3, Vec2, Vec4};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, throw_val};
 use wasm_bindgen_futures::spawn_local;
 
 mod dom;
@@ -12,15 +13,19 @@ mod render;
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(main_render());
-    spawn_local(main_net());
+    spawn_local(async { 
+        let e = try_join!(main_render(), main_net());
+        if let Err(e) = e {
+            throw_val(e);
+        }
+    });
 }
 
-pub async fn main_render() {
-    dom::content_loaded().await;
-    let context = Context::from_canvas("space_game").unwrap();
+pub async fn main_render() -> Result<(), JsValue> {
+    dom::content_loaded().await?;
+    let context = Context::from_canvas("space_game")?;
 
-    let texture = Texture::load(&context, "floors.png").await.unwrap();
+    let texture = Texture::load(&context, "floors.png").await?;
 
     let attributes = &[
         Attribute {
@@ -66,15 +71,12 @@ pub async fn main_render() {
             outColor = texture(sampler, frag_uv);
         }
         "##,
-    )
-    .expect("failed to compile program");
+    )?;
 
     let model_view_projection_loc = shader
-        .uniform_location::<glam::Mat3>("model_view_projection")
-        .expect("failed to get uniform location of model_view_projection");
+        .uniform_location::<glam::Mat3>("model_view_projection")?;
     let sampler_loc = shader
-        .uniform_location::<Sampler2D>("sampler")
-        .expect("failed to get uniform location of sampler");
+        .uniform_location::<Sampler2D>("sampler")?;
     shader.set_uniform(&sampler_loc, Sampler2D(0));
 
     let mut builder = MeshBuilder::new(attributes);
@@ -103,7 +105,7 @@ pub async fn main_render() {
         Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
 
     loop {
-        let time = dom::animation_frame().await;
+        let time = dom::animation_frame().await? / 100.0;
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
@@ -112,9 +114,10 @@ pub async fn main_render() {
     }
 }
 
-pub async fn main_net() {
+pub async fn main_net() -> Result<(), JsValue> {
     info!("Creating websocket");
-    let ws = open_websocket("ws://localhost:3030/ws/v1").await.unwrap();
+    let ws = open_websocket("ws://localhost:8000/ws/v1").await?;
     info!("Websocket connected");
-    ws.send_with_str("Hello World").unwrap();
+    ws.send_with_str("Hello World")?;
+    Ok(())
 }

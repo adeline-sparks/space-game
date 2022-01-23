@@ -1,12 +1,13 @@
 use super::Context;
 use crate::dom;
+use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
 pub struct Texture(WebGlTexture);
 
 impl Texture {
-    pub async fn load(context: &Context, src: &str) -> Result<Texture, String> {
+    pub async fn load(context: &Context, src: &str) -> Result<Texture, JsValue> {
         let image = dom::load_image(src).await?;
         let gl = &context.gl;
         let texture = gl
@@ -20,8 +21,7 @@ impl Texture {
             WebGl2RenderingContext::RGBA,
             WebGl2RenderingContext::UNSIGNED_BYTE,
             &image,
-        )
-        .map_err(|_| "Failed to `tex_image_2d`".to_string())?;
+        )?;
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
             WebGl2RenderingContext::TEXTURE_MIN_FILTER,
