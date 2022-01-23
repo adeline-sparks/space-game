@@ -105,7 +105,7 @@ pub async fn main_render() -> Result<(), JsValue> {
         Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
 
     loop {
-        let time = dom::animation_frame().await? / 100.0;
+        let time = dom::animation_frame().await? / 1e3;
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
         let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
