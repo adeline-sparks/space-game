@@ -12,7 +12,7 @@ impl Texture {
         let gl = &context.gl;
         let texture = gl
             .create_texture()
-            .ok_or_else(|| "Failed to `create_texture`".to_string())?;
+            .ok_or_else(|| JsValue::from("Failed to `create_texture`"))?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
             WebGl2RenderingContext::TEXTURE_2D,

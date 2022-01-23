@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 use super::mesh::Attribute;
@@ -17,7 +18,7 @@ impl Shader {
         attributes: &[Attribute],
         vert_source: &str,
         frag_source: &str,
-    ) -> Result<Shader, String> {
+    ) -> Result<Shader, JsValue> {
         let gl = context.gl.clone();
         let vert_shader = compile_shader(&gl, WebGl2RenderingContext::VERTEX_SHADER, vert_source)?;
         let frag_shader =
@@ -25,7 +26,7 @@ impl Shader {
 
         let program = gl
             .create_program()
-            .ok_or_else(|| "Failed to create_program".to_string())?;
+            .ok_or_else(|| JsValue::from("Failed to create_program"))?;
         gl.attach_shader(&program, &vert_shader);
         gl.attach_shader(&program, &frag_shader);
         for (i, attr) in attributes.iter().enumerate() {
@@ -40,13 +41,14 @@ impl Shader {
         {
             return Err(gl
                 .get_program_info_log(&program)
-                .unwrap_or_else(|| "Failed to get_program_info_log".to_string()));
+                .unwrap_or_else(|| "Failed to get_program_info_log".to_string())
+                .into());
         }
 
         let num_active_attributes = gl
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
             .as_f64()
-            .ok_or_else(|| "Failed to retrieve active attributes".to_string())?
+            .ok_or_else(|| JsValue::from("Failed to retrieve active attributes"))?
             as usize;
 
         let attribute_map = attributes
@@ -63,23 +65,23 @@ impl Shader {
             })?;
 
             if info.type_() != attribute.type_.webgl_type() {
-                return Err(format!(
+                return Err(JsValue::from(format!(
                     "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
                     info.name(),
                     info.type_(),
                     attribute.type_.webgl_type(),
-                ));
+                )));
             }
         }
 
         Ok(Shader { gl, program })
     }
 
-    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, String> {
+    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, JsValue> {
         let location = self
             .gl
             .get_uniform_location(&self.program, name)
-            .expect("Failed to `get_uniform_location`");
+            .ok_or(JsValue::from("Failed to `get_uniform_location`"))?;
         Ok(Uniform {
             location,
             phantom: PhantomData,
@@ -100,10 +102,10 @@ fn compile_shader(
     context: &WebGl2RenderingContext,
     shader_type: u32,
     source: &str,
-) -> Result<WebGlShader, String> {
+) -> Result<WebGlShader, JsValue> {
     let shader = context
         .create_shader(shader_type)
-        .ok_or_else(|| "Failed to create_shader".to_string())?;
+        .ok_or_else(|| JsValue::from("Failed to create_shader"))?;
     context.shader_source(&shader, source);
     context.compile_shader(&shader);
 
@@ -114,7 +116,8 @@ fn compile_shader(
     {
         return Err(context
             .get_shader_info_log(&shader)
-            .unwrap_or_else(|| "Failed to `get_shader_info_log`".to_string()));
+            .unwrap_or_else(|| "Failed to `get_shader_info_log`".to_string())
+            .into());
     }
 
     Ok(shader)

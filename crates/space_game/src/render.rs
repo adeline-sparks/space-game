@@ -1,4 +1,4 @@
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
@@ -71,14 +71,12 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn from_canvas(element_id: &str) -> Result<Self, String> {
+    pub fn from_canvas(element_id: &str) -> Result<Self, JsValue> {
         let canvas = dom::get_canvas(element_id)?;
         let gl = canvas
-            .get_context("webgl2")
-            .ok()
-            .flatten()
-            .and_then(|o| o.dyn_into::<WebGl2RenderingContext>().ok())
-            .ok_or_else(|| "Failed to get webgl2 context".to_string())?;
+            .get_context("webgl2")?
+            .ok_or_else(|| JsValue::from("Failed to get WebGl2RenderingContext"))?
+            .dyn_into::<WebGl2RenderingContext>()?;
         Ok(Context { gl, canvas })
     }
 

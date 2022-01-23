@@ -32,7 +32,7 @@ pub async fn load_image(src: &str) -> Result<HtmlImageElement, JsValue> {
 }
 
 pub async fn open_websocket(url: &str) -> Result<WebSocket, JsValue> {
-    let ws = WebSocket::new(url).map_err(|_| "Failed to create websocket".to_string())?;
+    let ws = WebSocket::new(url)?;
     ws.set_binary_type(BinaryType::Arraybuffer);
 
     select! {
@@ -57,12 +57,11 @@ fn make_callback_future() -> (Function, impl Future<Output=JsValue>) {
     (resolve_opt.unwrap(), async { future.await.unwrap() })
 }
 
-pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, String> {
-    expect_document()
+pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, JsValue> {
+    Ok(expect_document()
         .get_element_by_id(element_id)
-        .ok_or_else(|| format!("get_element_by_id failed for `{}`", element_id))?
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .map_err(|_| format!("`{}` is not a canvas", element_id))
+        .ok_or_else(|| JsValue::from(format!("get_element_by_id failed for `{}`", element_id)))?
+        .dyn_into::<web_sys::HtmlCanvasElement>()?)
 }
 
 fn expect_window() -> Window {

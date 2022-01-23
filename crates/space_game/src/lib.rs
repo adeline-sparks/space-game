@@ -98,7 +98,7 @@ pub async fn main_render() -> Result<(), JsValue> {
     builder.push(Vec2::new(0.5, -0.5));
     builder.push(42.0);
     builder.end_vert();
-    let mesh = builder.build(&context).expect("failed to build Mesh");
+    let mesh = builder.build(&context)?;
 
     let canvas = context.canvas();
     let projection =

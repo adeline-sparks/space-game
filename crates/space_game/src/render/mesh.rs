@@ -1,4 +1,5 @@
 use js_sys::{Uint16Array, Uint8Array};
+use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject};
 
 use super::{Context, DataType};
@@ -64,18 +65,18 @@ impl<'a> MeshBuilder<'a> {
         self.indices.push(id);
     }
 
-    pub fn build(&self, context: &Context) -> Result<Mesh, String> {
+    pub fn build(&self, context: &Context) -> Result<Mesh, JsValue> {
         let gl = &context.gl;
         assert!(self.attribute_num == 0);
 
         let vao = gl
             .create_vertex_array()
-            .ok_or_else(|| "Failed to create_vertex_array".to_string())?;
+            .ok_or_else(|| JsValue::from("Failed to create_vertex_array"))?;
         gl.bind_vertex_array(Some(&vao));
 
         let vert_buffer = gl
             .create_buffer()
-            .ok_or_else(|| "failed to create vertex buffer".to_string())?;
+            .ok_or_else(|| JsValue::from("failed to create vertex buffer"))?;
         gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
         gl.buffer_data_with_array_buffer_view(
             WebGl2RenderingContext::ARRAY_BUFFER,
@@ -100,7 +101,7 @@ impl<'a> MeshBuilder<'a> {
 
         let index_buffer = gl
             .create_buffer()
-            .ok_or_else(|| "failed to create index buffer".to_string())?;
+            .ok_or_else(|| JsValue::from("failed to create index buffer"))?;
         gl.bind_buffer(
             WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
             Some(&index_buffer),
