@@ -1,9 +1,10 @@
 use dom::open_websocket;
-use futures::{try_join};
+use futures::try_join;
 use glam::{Mat3, Vec2, Vec4};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
-use wasm_bindgen::{prelude::*, throw_val};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::throw_val;
 use wasm_bindgen_futures::spawn_local;
 
 mod dom;
@@ -13,7 +14,7 @@ mod render;
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(async { 
+    spawn_local(async {
         let e = try_join!(main_render(), main_net());
         if let Err(e) = e {
             throw_val(e);
@@ -73,10 +74,9 @@ pub async fn main_render() -> Result<(), JsValue> {
         "##,
     )?;
 
-    let model_view_projection_loc = shader
-        .uniform_location::<glam::Mat3>("model_view_projection")?;
-    let sampler_loc = shader
-        .uniform_location::<Sampler2D>("sampler")?;
+    let model_view_projection_loc =
+        shader.uniform_location::<glam::Mat3>("model_view_projection")?;
+    let sampler_loc = shader.uniform_location::<Sampler2D>("sampler")?;
     shader.set_uniform(&sampler_loc, Sampler2D(0));
 
     let mut builder = MeshBuilder::new(attributes);
