@@ -17,6 +17,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 glam = "0.20"
 futures = "0.3"
+space_game_core = { path = "../space_game_core" }
 
 [dependencies.web-sys]
 version = "0.3"
