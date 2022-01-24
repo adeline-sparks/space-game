@@ -1,3 +1,5 @@
+mod ecs;
+
 #[cfg(test)]
 mod tests {
     #[test]
