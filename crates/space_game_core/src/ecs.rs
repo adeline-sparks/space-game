@@ -17,9 +17,10 @@ pub struct Prototype {
 
 pub struct PrototypeConfig(HashMap<String, String>); // TODO better?
 
+#[allow(unused)]
 pub trait System {
     fn execute(&mut self, systems: &SystemRefs<'_>, commands: &mut SystemCommands) { }
-    fn dependencies(&self) -> &[Dependency] { &[] }
+    fn dependencies(&self) -> &[Dependency] { &[] } // TODO make a SystemConfig to prevent this from changing
 
     fn init(&mut self, commands: &mut SystemCommands) { }
     fn create_entity(&mut self, id: EntityId, config: &PrototypeConfig, arg: Option<Box<dyn Any>>, commands: &mut SystemCommands) { }
@@ -41,18 +42,27 @@ impl SystemCommands {
 pub enum SystemCommand {
     New(PrototypeId, SecondaryMap<SystemId, Box<dyn Any>>),
     Remove(EntityId),
-    Exit,
 }
 
-pub struct Dependency {
-    system: SystemId,
-    pre_execute: bool,
+pub enum Dependency {
+    Before(SystemId), // TODO implement Before, BeforeMut, After
+    After(SystemId),
+}
+
+impl Dependency {
+    pub fn system_id(&self) -> SystemId {
+        match self {
+            Dependency::Before(id) => *id,
+            Dependency::After(id) => *id,
+        }
+    }
 }
 
 pub struct World {
     entities: SlotMap<EntityId, PrototypeId>,
     prototypes: NamedSlotMap<PrototypeId, Prototype>,
     systems: NamedSlotMap<SystemId, Option<Box<dyn System>>>,
+    execution_order: Option<Vec<SystemId>>,
 }
 
 impl World {
@@ -69,8 +79,8 @@ impl World {
     }
 
     pub fn register_system_dyn(&mut self, name: String, system: Box<dyn System>) -> SystemId {
+        self.execution_order = None;
         self.systems.insert(name, Some(system))
-
     }
 
     pub fn register_system<S: System + 'static>(&mut self, name: String, s: S) -> SystemId {
@@ -98,19 +108,14 @@ impl World {
     }
 
     pub fn execute(&mut self) {
-        let execution_order = self.system_execution_order();
-
-        loop {
-            let mut commands = SystemCommands::new();
-            self.execute_systems(&mut commands, &execution_order);
-            let exit = self.execute_commands(commands);
-            if exit {
-                break;
-            }
-        }
+        let execution_order = self.execution_order.take().unwrap_or_else(|| self.compute_execution_order());
+        let mut commands = SystemCommands::new();
+        self.execute_systems(&mut commands, &execution_order);
+        self.execute_commands(commands);
+        self.execution_order = Some(execution_order);
     }
 
-    fn system_execution_order(&self) -> Vec<SystemId> { todo!() }
+    fn compute_execution_order(&self) -> Vec<SystemId> { todo!() }
 
     fn execute_systems(&mut self, commands: &mut SystemCommands, order: &[SystemId]) {
         for &sys_id in order {
@@ -118,7 +123,8 @@ impl World {
             let mut deps = sys
                 .dependencies()
                 .iter()
-                .map(|d| (d.system, self.systems[d.system].take().unwrap()))
+                .map(|d| d.system_id())
+                .map(|id| (id, self.systems[id].take().unwrap()))
                 .collect::<Vec<_>>();
             let deps_refs = deps
                 .iter_mut()
@@ -153,7 +159,6 @@ impl World {
                             self.systems[sys_id].as_mut().unwrap().remove_entity(id, &mut new_commands);
                         }
                     }
-                    SystemCommand::Exit => return true,
                 }
             }
             commands = new_commands;
