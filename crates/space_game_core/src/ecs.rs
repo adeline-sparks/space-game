@@ -19,10 +19,13 @@ pub struct PrototypeConfig(HashMap<String, String>); // TODO better?
 
 #[allow(unused)]
 pub trait System {
+    // fn pre_execute(&mut self) { }     // TODO
     fn execute(&mut self, systems: &SystemRefs<'_>, commands: &mut SystemCommands) { }
     fn dependencies(&self) -> &[Dependency] { &[] } // TODO make a SystemConfig to prevent this from changing
 
     fn init(&mut self, commands: &mut SystemCommands) { }
+
+    // arg -> init
     fn create_entity(&mut self, id: EntityId, config: &PrototypeConfig, arg: Option<Box<dyn Any>>, commands: &mut SystemCommands) { }
     fn remove_entity(&mut self, id: EntityId, commands: &mut SystemCommands) { }
 
@@ -30,6 +33,7 @@ pub trait System {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
+// TODO support both & and &mut.
 pub struct SystemRefs<'a>(SecondaryMap<SystemId, &'a mut (dyn System + 'static)>);
 
 #[derive(Default)]
@@ -45,15 +49,17 @@ pub enum SystemCommand {
 }
 
 pub enum Dependency {
-    Before(SystemId), // TODO implement Before, BeforeMut, After
-    After(SystemId),
+    ReadPrevious(SystemId),
+    Write(SystemId),
+    Read(SystemId),
 }
 
 impl Dependency {
     pub fn system_id(&self) -> SystemId {
         match self {
-            Dependency::Before(id) => *id,
-            Dependency::After(id) => *id,
+            Dependency::ReadPrevious(id) |
+            Dependency::Write(id) | 
+            Dependency::Read(id) => *id,
         }
     }
 }
