@@ -1,259 +1,197 @@
-use std::any::Any;
-use std::collections::{HashMap, hash_map, HashSet};
-use std::ops::{Index, IndexMut};
+use std::{any::{Any, TypeId}, collections::HashMap, ops::Deref};
 
-use slotmap::{new_key_type, SlotMap, SecondaryMap};
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub struct SystemId(TypeId);
 
-new_key_type! {
-    pub struct EntityId;
-    pub struct PrototypeId;
-    pub struct SystemId;
+impl SystemId {
+    pub fn of<S: System>() -> Self { SystemId(TypeId::of::<S>()) }
 }
 
-pub struct Prototype {
-    systems: HashSet<SystemId>,
-    config: PrototypeConfig,
+impl From<&dyn ErasedSystem> for SystemId {
+    fn from(sys: &dyn ErasedSystem) -> Self {
+        SystemId(sys.as_any().type_id())
+    }
 }
 
-pub struct PrototypeConfig(HashMap<String, String>); // TODO better?
+pub trait System : Sized + 'static {
+    type Inputs : for <'a> SystemInputs<'a>;
 
-#[allow(unused)]
-pub trait System {
-    // fn pre_execute(&mut self) { }     // TODO
-    fn execute(&mut self, systems: &SystemRefs<'_>, commands: &mut SystemCommands) { }
-    fn dependencies(&self) -> &[Dependency] { &[] } // TODO make a SystemConfig to prevent this from changing
-
-    fn init(&mut self, commands: &mut SystemCommands) { }
-
-    // arg -> init
-    fn create_entity(&mut self, id: EntityId, config: &PrototypeConfig, arg: Option<Box<dyn Any>>, commands: &mut SystemCommands) { }
-    fn remove_entity(&mut self, id: EntityId, commands: &mut SystemCommands) { }
-
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn update(&mut self, inputs: Self::Inputs);
 }
 
-// TODO support both & and &mut.
-pub struct SystemRefs<'a>(SecondaryMap<SystemId, &'a mut (dyn System + 'static)>);
+pub trait SystemInputs<'a> {
+    fn from(systems: &'a SystemMap) -> Self;
 
-#[derive(Default)]
-pub struct SystemCommands(Vec<SystemCommand>);
-
-impl SystemCommands {
-    pub fn new() -> Self { Default::default() }
-}
-
-pub enum SystemCommand {
-    New(PrototypeId, SecondaryMap<SystemId, Box<dyn Any>>),
-    Remove(EntityId),
+    fn write_dependencies(out: &mut Vec<Dependency>);
 }
 
 pub enum Dependency {
-    ReadPrevious(SystemId),
-    Write(SystemId),
     Read(SystemId),
+    ReadDelay(SystemId),
 }
 
-impl Dependency {
-    pub fn system_id(&self) -> SystemId {
-        match self {
-            Dependency::ReadPrevious(id) |
-            Dependency::Write(id) | 
-            Dependency::Read(id) => *id,
-        }
+impl<'a, S: System> SystemInputs<'a> for &'a S {
+    fn from(systems: &'a SystemMap) -> Self {
+        systems.get::<S>()
+    }
+
+    fn write_dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::Read(SystemId::of::<S>()));
     }
 }
 
-pub struct World {
-    entities: SlotMap<EntityId, PrototypeId>,
-    prototypes: NamedSlotMap<PrototypeId, Prototype>,
-    systems: NamedSlotMap<SystemId, Option<Box<dyn System>>>,
-    execution_order: Option<Vec<SystemId>>,
+struct Delay<S>(S);
+
+impl<'a, S: System> SystemInputs<'a> for Delay<&'a S> {
+    fn from(systems: &'a SystemMap) -> Self {
+        Delay(systems.get::<S>())
+    }
+
+    fn write_dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::ReadDelay(SystemId::of::<S>()));
+    }
 }
 
-impl World {
-    pub fn register_prototype(&mut self, name: String, proto: Prototype) -> PrototypeId {
-        self.prototypes.insert(name, proto)
+impl<'a, A: SystemInputs<'a>> SystemInputs<'a> for (A,) {
+    fn from(systems: &'a SystemMap) -> Self {
+        (A::from(systems),)
     }
 
-    pub fn lookup_prototype(&mut self, name: &str) -> PrototypeId {
-        self.prototypes.lookup_key(name)
+    fn write_dependencies(out: &mut Vec<Dependency>) {
+        A::write_dependencies(out);
+    }
+}
+
+impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
+    fn from(systems: &'a SystemMap) -> Self {
+        (A::from(systems), B::from(systems))
     }
 
-    pub fn get_prototype(&self, id: PrototypeId) -> &Prototype {
-        &self.prototypes[id]
-    }
-
-    pub fn register_system_dyn(&mut self, name: String, system: Box<dyn System>) -> SystemId {
-        self.execution_order = None;
-        self.systems.insert(name, Some(system))
-    }
-
-    pub fn register_system<S: System + 'static>(&mut self, name: String, s: S) -> SystemId {
-        self.register_system_dyn(name, Box::new(s))
-    }
-
-    pub fn lookup_system(&mut self, name: &str) -> SystemId {
-        self.systems.lookup_key(name)
-    }
-
-    pub fn get_system<S: System + 'static>(&self, id: SystemId) -> &S {
-        self.get_system_dyn(id).as_any().downcast_ref().unwrap()
-    }
-
-    pub fn get_system_dyn(&self, id: SystemId) -> &dyn System {
-        &**self.systems[id].as_ref().unwrap()
-    }
-    
-    pub fn get_system_mut<S: System + 'static>(&mut self, id: SystemId) -> &mut S {
-        self.get_system_dyn_mut(id).as_any_mut().downcast_mut().unwrap()
-    }
-
-    pub fn get_system_dyn_mut(&mut self, id: SystemId) -> &mut dyn System {
-        &mut **self.systems[id].as_mut().unwrap()
-    }
-
-    pub fn execute(&mut self) {
-        let execution_order = self.execution_order.take().unwrap_or_else(|| self.compute_execution_order());
-        let mut commands = SystemCommands::new();
-        self.execute_systems(&mut commands, &execution_order);
-        self.execute_commands(commands);
-        self.execution_order = Some(execution_order);
-    }
-
-    fn compute_execution_order(&self) -> Vec<SystemId> { todo!() }
-
-    fn execute_systems(&mut self, commands: &mut SystemCommands, order: &[SystemId]) {
-        for &sys_id in order {
-            let mut sys = self.systems[sys_id].take().unwrap();
-            let mut deps = sys
-                .dependencies()
-                .iter()
-                .map(|d| d.system_id())
-                .map(|id| (id, self.systems[id].take().unwrap()))
-                .collect::<Vec<_>>();
-            let deps_refs = deps
-                .iter_mut()
-                .map(|(dep_id, dep)| (*dep_id, &mut **dep))
-                .collect::<SecondaryMap<_, _>>();
-
-            sys.execute(&SystemRefs(deps_refs), commands);
-            
-            for (dep_id, dep) in deps {
-                self.systems[dep_id] = Some(dep);
-            }
-            self.systems[sys_id] = Some(sys);
-        }
-    }
-
-    fn execute_commands(&mut self, mut commands: SystemCommands) -> bool {
-        while !commands.0.is_empty() {
-            let mut new_commands = SystemCommands::new();
-            for cmd in commands.0 {
-                match cmd {
-                    SystemCommand::New(proto_id, mut args) => {
-                        let id = self.entities.insert(proto_id);
-                        let proto = &self.prototypes[proto_id];
-                        for &sys_id in &proto.systems {
-                            self.systems[sys_id].as_mut().unwrap().create_entity(id, &proto.config, args.remove(sys_id), &mut new_commands);
-                        }
-                    }
-                    SystemCommand::Remove(id) => {
-                        let proto_id = self.entities.remove(id).unwrap();
-                        let proto = &self.prototypes[proto_id];
-                        for &sys_id in &proto.systems {
-                            self.systems[sys_id].as_mut().unwrap().remove_entity(id, &mut new_commands);
-                        }
-                    }
-                }
-            }
-            commands = new_commands;
-        }
-
-        return false;
+    fn write_dependencies(out: &mut Vec<Dependency>) {
+        A::write_dependencies(out);
+        B::write_dependencies(out);
     }
 }
 
 #[derive(Default)]
-pub struct NamedSlotMap<K: slotmap::Key, V> {
-    slots: SlotMap<K, Option<V>>,
-    names: SecondaryMap<K, String>,
-    slots_by_name: HashMap<String, K>,
+pub struct SystemMap {
+    systems: HashMap<SystemId, Option<Box<dyn ErasedSystem>>>,
 }
 
-impl<K: slotmap::Key, V> NamedSlotMap<K, V> {
-    pub fn new() -> Self {
-        NamedSlotMap {
-            slots: SlotMap::with_key(),
-            names: SecondaryMap::new(),
-            slots_by_name: HashMap::new(),
+trait ErasedSystem {
+    fn update_erased(&mut self, systems: &SystemMap);
+    fn get_dependencies_erased(&self) -> Vec<Dependency>;
+
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
+}
+
+impl SystemMap {
+    pub fn new() -> Self { Default::default() }
+
+    pub fn insert<S: System>(&mut self, sys: S) { 
+        if self.systems.insert(SystemId::of::<S>(), Some(Box::new(sys))).is_some() {
+            panic!("Can't insert duplicate system");
         }
     }
+    pub fn remove<S: System>(&mut self) -> S {
+        *self.systems.remove(&SystemId::of::<S>())
+            .expect("Can't remove system that was not inserted")
+            .expect("Can't remove system that was taken")
+            .as_any_box()
+            .downcast()
+            .unwrap()
+    }
 
-    pub fn insert(&mut self, name: String, val: V) -> K {
-        match self.slots_by_name.entry(name) {
-            hash_map::Entry::Occupied(entry) => {
-                let key = *entry.get();
-                let slot = &mut self.slots[key];
-                if slot.is_some() {
-                    panic!("Duplicate name `{}`", entry.key());
-                }
-                *slot = Some(val);
-                key
-            }
-            hash_map::Entry::Vacant(entry) => {
-                let key = self.slots.insert(Some(val));
-                self.names.insert(key, entry.key().clone()).map(|_| panic!());
-                entry.insert(key);
-                key
-            }
+    pub fn get<S: System>(&self) -> &S { 
+        self.systems.get(&SystemId::of::<S>())
+            .expect("Can't get system that was not inserted")
+            .as_ref()
+            .expect("Can't get system that was taken")
+            .as_any()
+            .downcast_ref()
+            .unwrap()
+    }
+
+    fn get_erased(&self, id: SystemId) -> &dyn ErasedSystem {
+        self.systems.get(&id)
+            .expect("Can't get system that was not inserted")
+            .as_ref()
+            .expect("Can't get system that was taken")
+            .deref()
+    }
+
+    fn take_erased(&mut self, id: SystemId) -> Box<dyn ErasedSystem> { 
+        self.systems.get_mut(&id)
+            .expect("Can't take system that was not inserted")
+            .take()
+            .expect("Can't take system that was already taken")
+    }
+
+    fn untake_erased(&mut self, sys: Box<dyn ErasedSystem>) { 
+        let id = SystemId::from(sys.as_ref());
+        let sys_opt = self.systems.get_mut(&id)
+            .expect("Can't untake system that was never inserted");
+        if sys_opt.is_some() {
+            panic!("Can't untake system that was never taken");
+        }
+        *sys_opt = Some(sys);
+    }
+
+    pub fn topological_order(&self) -> Vec<SystemId> { 
+        let mut dep_map = HashMap::<SystemId, Vec<SystemId>>::new();
+        for sys in self.systems.values() {
+            let sys = sys.as_ref().expect("Can't compute topological_order with taken System(s)");
+        }
+
+
+        let mut result = Vec::new();
+        todo!()
+    }
+}
+
+impl<I: for<'a> SystemInputs<'a>, S: System<Inputs=I>> ErasedSystem for S {
+    fn update_erased(&mut self, systems: &SystemMap) {
+        self.update(I::from(systems));
+    }
+
+    fn get_dependencies_erased(&self) -> Vec<Dependency> {
+        let mut result = Vec::new();
+        I::write_dependencies(&mut result);
+        result
+    }
+
+    fn as_any(&self) -> &dyn Any { self }
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any> { self }
+}
+
+#[derive(Default)]
+pub struct World {
+    systems: SystemMap,
+    topological_order: Option<Vec<SystemId>>,
+}
+
+impl World {
+    pub fn new() -> Self { Default::default() }
+
+    pub fn systems(&self) -> &SystemMap { 
+        &self.systems 
+    }
+
+    pub fn systems_mut(&mut self) -> &mut SystemMap { 
+        self.topological_order = None;
+        &mut self.systems
+    }
+
+    pub fn update(&mut self) {
+        let order = self.topological_order
+            .get_or_insert_with(|| self.systems.topological_order())
+            .as_slice();
+
+        for &id in order {
+            let mut sys = self.systems.take_erased(id);
+            sys.update_erased(&self.systems);
+            self.systems.untake_erased(sys);
         }
     }
-
-    pub fn lookup_key(&mut self, name: &str) -> K {
-        if let Some(key) = self.slots_by_name.get(name) {
-            return *key;
-        }
-
-        let key = self.slots.insert(None);
-        self.names.insert(key, name.to_string()).map(|_| panic!());
-        self.slots_by_name.insert(name.to_string(), key).map(|_| panic!());
-        key
-    }
-
-    pub fn lookup_name(&self, key: K) -> &str {
-        &self.names[key]
-    }
-
-    pub fn remove(&mut self, key: K) -> V {
-        let val = self.slots.remove(key).unwrap().unwrap();
-        let name = self.names.remove(key).unwrap();
-        self.slots_by_name.remove(&name).unwrap();
-        val
-    }
-
-    pub fn iter_missing_lookups(&self) -> impl Iterator<Item=K> + '_ {
-        self.slots.iter().filter_map(|(k, v)| {
-            if v.is_none() {
-                Some(k)
-            } else {
-                None
-            }
-        })
-    }
 }
-
-impl<K: slotmap::Key, V> Index<K> for NamedSlotMap<K, V> {
-    type Output = V;
-
-    fn index(&self, index: K) -> &Self::Output {
-        self.slots[index].as_ref().unwrap()
-    }
-}
-
-impl<K: slotmap::Key, V> IndexMut<K> for NamedSlotMap<K, V> {
-    fn index_mut(&mut self, index: K) -> &mut Self::Output {
-        self.slots[index].as_mut().unwrap()
-    }
-}
-
