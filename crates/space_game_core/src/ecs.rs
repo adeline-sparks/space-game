@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, collections::{HashMap, HashSet}};
+use std::{any::{Any, TypeId}, collections::{HashMap, HashSet, VecDeque}};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
@@ -15,7 +15,7 @@ pub trait System<'a> : 'static {
 
 pub trait SystemInputs<'a> {
     fn write_dependencies(output: &mut Vec<Dependency>);
-    fn assemble(systems: &'a SystemMap) -> Self;
+    fn assemble(systems: &'a SystemMap, events: &'a EventQueueMap) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -29,14 +29,27 @@ impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
         output.push(Dependency::Read(SystemId::of::<S>()));
     }
 
-    fn assemble(systems: &'a SystemMap) -> Self {
+    fn assemble(systems: &'a SystemMap, _events: &'a EventQueueMap) -> Self {
         systems.get::<S>()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Delay<'a, S>(&'a S);
+
+impl<'a, S: System<'a>> SystemInputs<'a> for Delay<'a, S> {
+    fn write_dependencies(output: &mut Vec<Dependency>) {
+        output.push(Dependency::ReadDelay(SystemId::of::<S>()));
+    }
+
+    fn assemble(systems: &'a SystemMap, _events: &'a EventQueueMap) -> Self {
+        Delay(systems.get::<S>())
     }
 }
 
 impl<'a> SystemInputs<'a> for () {
     fn write_dependencies(_output: &mut Vec<Dependency>) { }
-    fn assemble(_systems: &'a SystemMap) -> Self { () }
+    fn assemble(_systems: &'a SystemMap, _events: &'a EventQueueMap) -> Self { () }
 }
 
 impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
@@ -45,8 +58,8 @@ impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
         B::write_dependencies(output);
     }
 
-    fn assemble(systems: &'a SystemMap) -> Self {
-        (A::assemble(systems), B::assemble(systems))
+    fn assemble(systems: &'a SystemMap, events: &'a EventQueueMap) -> Self {
+        (A::assemble(systems, events), B::assemble(systems, events))
     }
 }
 
@@ -57,12 +70,14 @@ pub struct SystemMap {
 
 trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
-    fn assemble_update(&mut self, systems: &'a SystemMap);
+    fn assemble_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
 }
+
+type DynAnySystem = dyn for<'a> AnySystem<'a>;
 
 impl<'a, S: System<'a>> AnySystem<'a> for S {
     fn dependencies(&self) -> Vec<Dependency> {
@@ -71,8 +86,8 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         result
     }
 
-    fn assemble_update(&mut self, systems: &'a SystemMap) {
-        self.update(S::Inputs::assemble(systems));
+    fn assemble_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap) {
+        self.update(S::Inputs::assemble(systems, events));
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -87,8 +102,6 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         self
     }    
 }
-
-type DynAnySystem = dyn for<'a> AnySystem<'a>;
 
 impl From<&DynAnySystem> for SystemId {
     fn from(sys: &DynAnySystem) -> Self {
@@ -190,9 +203,21 @@ impl SystemMap {
     }
 }
 
+pub trait Event: 'static { }
+
+pub struct EventQueue<E: Event>(VecDeque<E>);
+
+trait AnyEventQueue: 'static { }
+
+#[derive(Default)]
+pub struct EventQueueMap {
+    queues: HashMap<TypeId, Box<dyn AnyEventQueue>>,
+}
+
 #[derive(Default)]
 pub struct World {
     systems: SystemMap,
+    event_queues: EventQueueMap,
     topological_order: Option<Vec<SystemId>>,
 }
 
@@ -215,7 +240,7 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            sys.assemble_update(&self.systems);
+            sys.assemble_update(&self.systems, &mut self.event_queues);
             self.systems.untake_any(sys);
         }
     }
@@ -227,14 +252,14 @@ mod test {
 
     #[test]
     fn test_simple() {
-        struct SysA(usize);
-        struct SysB(usize);
-        struct SysC(usize);
+        struct SysA(u32);
+        struct SysB(u32);
+        struct SysC(u32);
 
         impl<'a> System<'a> for SysA {
-            type Inputs = ();
+            type Inputs = Delay<'a, SysC>;
 
-            fn update(&mut self, _systems: ()) { self.0 += 1; }
+            fn update(&mut self, systems: Self::Inputs) { self.0 = systems.0.0; }
         }
 
         impl<'a> System<'a> for SysB {
@@ -256,9 +281,11 @@ mod test {
         world.systems_mut().insert(SysB(0));
         world.systems_mut().insert(SysC(0));
 
+        let mut val = 0;
         for i in 0..10 {
             world.update();
-            assert_eq!(world.systems().get::<SysC>().0, 3 * (i + 1));
+            val += 2*(i+1);
+            assert_eq!(world.systems().get::<SysC>().0, val);
         }
     }
 }
