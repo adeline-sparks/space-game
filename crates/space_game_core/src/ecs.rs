@@ -52,26 +52,26 @@ impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
 
 #[derive(Default)]
 pub struct SystemMap {
-    systems: HashMap<SystemId, Option<Box<dyn AnySystem>>>,
+    systems: HashMap<SystemId, Option<Box<DynAnySystem>>>,
 }
 
-trait AnySystem {
+trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
-    fn assemble_update(&mut self, systems: &SystemMap);
+    fn assemble_update(&mut self, systems: &'a SystemMap);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
 }
 
-impl<S: for<'a> System<'a>> AnySystem for S {
+impl<'a, S: System<'a>> AnySystem<'a> for S {
     fn dependencies(&self) -> Vec<Dependency> {
         let mut result = Vec::new();
         S::Inputs::write_dependencies(&mut result);
         result
     }
 
-    fn assemble_update(&mut self, systems: &SystemMap) {
+    fn assemble_update(&mut self, systems: &'a SystemMap) {
         self.update(S::Inputs::assemble(systems));
     }
 
@@ -88,8 +88,10 @@ impl<S: for<'a> System<'a>> AnySystem for S {
     }    
 }
 
-impl From<&dyn AnySystem> for SystemId {
-    fn from(sys: &dyn AnySystem) -> Self {
+type DynAnySystem = dyn for<'a> AnySystem<'a>;
+
+impl From<&DynAnySystem> for SystemId {
+    fn from(sys: &DynAnySystem) -> Self {
         SystemId(sys.as_any().type_id())
     }
 }
@@ -97,7 +99,7 @@ impl From<&dyn AnySystem> for SystemId {
 impl SystemMap {
     pub fn new() -> Self { Default::default() }
 
-    pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) { 
+    pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) {
         if self.systems.insert(SystemId::of::<S>(), Some(Box::new(sys))).is_some() {
             panic!("Can't insert duplicate system");
         }
@@ -121,14 +123,14 @@ impl SystemMap {
             .unwrap()
     }
 
-    fn take_any(&mut self, id: SystemId) -> Box<dyn AnySystem> { 
+    fn take_any(&mut self, id: SystemId) -> Box<DynAnySystem> { 
         self.systems.get_mut(&id)
             .expect("Can't take system that was not inserted")
             .take()
             .expect("Can't take system that was already taken")
     }
 
-    fn untake_any(&mut self, sys: Box<dyn AnySystem>) { 
+    fn untake_any(&mut self, sys: Box<DynAnySystem>) { 
         let id = SystemId::from(sys.as_ref());
         let sys_opt = self.systems.get_mut(&id)
             .expect("Can't untake system that was never inserted");
