@@ -4,18 +4,18 @@ use std::{any::{Any, TypeId}, collections::{HashMap, HashSet}};
 pub struct SystemId(TypeId);
 
 impl SystemId {
-    pub fn of<S: System>() -> Self { SystemId(TypeId::of::<S>()) }
+    pub fn of<'a, S: System<'a>>() -> Self { SystemId(TypeId::of::<S>()) }
 }
 
-impl From<&dyn AnySystem> for SystemId {
-    fn from(sys: &dyn AnySystem) -> Self {
-        SystemId(sys.as_any().type_id())
-    }
+pub trait System<'a> : 'static {
+    type Inputs: SystemInputs<'a>;
+
+    fn update(&mut self, inputs: Self::Inputs);
 }
 
-pub trait System : 'static {
-    fn dependencies(&self) -> Vec<Dependency>;
-    fn update(&mut self, systems: &SystemMap);
+pub trait SystemInputs<'a> {
+    fn write_dependencies(output: &mut Vec<Dependency>);
+    fn assemble(systems: &'a SystemMap) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -24,30 +24,85 @@ pub enum Dependency {
     ReadDelay(SystemId),
 }
 
+impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
+    fn write_dependencies(output: &mut Vec<Dependency>) {
+        output.push(Dependency::Read(SystemId::of::<S>()));
+    }
+
+    fn assemble(systems: &'a SystemMap) -> Self {
+        systems.get::<S>()
+    }
+}
+
+impl<'a> SystemInputs<'a> for () {
+    fn write_dependencies(_output: &mut Vec<Dependency>) { }
+    fn assemble(_systems: &'a SystemMap) -> Self { () }
+}
+
+impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
+    fn write_dependencies(output: &mut Vec<Dependency>) {
+        A::write_dependencies(output);
+        B::write_dependencies(output);
+    }
+
+    fn assemble(systems: &'a SystemMap) -> Self {
+        (A::assemble(systems), B::assemble(systems))
+    }
+}
+
 #[derive(Default)]
 pub struct SystemMap {
     systems: HashMap<SystemId, Option<Box<dyn AnySystem>>>,
 }
 
-trait AnySystem : System {
+trait AnySystem {
+    fn dependencies(&self) -> Vec<Dependency>;
+    fn assemble_update(&mut self, systems: &SystemMap);
+
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
 }
 
-impl<T: System + Sized> AnySystem for T {
-    fn as_any(&self) -> &dyn Any { self }
-    fn as_any_box(self: Box<Self>) -> Box<dyn Any> { self }
+impl<S: for<'a> System<'a>> AnySystem for S {
+    fn dependencies(&self) -> Vec<Dependency> {
+        let mut result = Vec::new();
+        S::Inputs::write_dependencies(&mut result);
+        result
+    }
+
+    fn assemble_update(&mut self, systems: &SystemMap) {
+        self.update(S::Inputs::assemble(systems));
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }    
+}
+
+impl From<&dyn AnySystem> for SystemId {
+    fn from(sys: &dyn AnySystem) -> Self {
+        SystemId(sys.as_any().type_id())
+    }
 }
 
 impl SystemMap {
     pub fn new() -> Self { Default::default() }
 
-    pub fn insert<S: System>(&mut self, sys: S) { 
+    pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) { 
         if self.systems.insert(SystemId::of::<S>(), Some(Box::new(sys))).is_some() {
             panic!("Can't insert duplicate system");
         }
     }
-    pub fn remove<S: System>(&mut self) -> S {
+    pub fn remove<'a, S: System<'a>>(&mut self) -> S {
         *self.systems.remove(&SystemId::of::<S>())
             .expect("Can't remove system that was not inserted")
             .expect("Can't remove system that was taken")
@@ -56,7 +111,7 @@ impl SystemMap {
             .unwrap()
     }
 
-    pub fn get<S: System>(&self) -> &S { 
+    pub fn get<'a, S: System<'a>>(&self) -> &S { 
         self.systems.get(&SystemId::of::<S>())
             .expect("Can't get system that was not inserted")
             .as_ref()
@@ -158,7 +213,7 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            sys.update(&self.systems);
+            sys.assemble_update(&self.systems);
             self.systems.untake_any(sys);
         }
     }
@@ -174,25 +229,23 @@ mod test {
         struct SysB(usize);
         struct SysC(usize);
 
-        impl System for SysA {
-            fn dependencies(&self) -> Vec<Dependency> { vec![] }
-            fn update(&mut self, _systems: &SystemMap) { self.0 += 1; }
+        impl<'a> System<'a> for SysA {
+            type Inputs = ();
+
+            fn update(&mut self, _systems: ()) { self.0 += 1; }
         }
 
-        impl System for SysB {
-            fn dependencies(&self) -> Vec<Dependency> { vec![] }
-            fn update(&mut self, _systems: &SystemMap) { self.0 += 2; }
+        impl<'a> System<'a> for SysB {
+            type Inputs = ();
+
+            fn update(&mut self, _systems: ()) { self.0 += 2; }
         }
 
-        impl System for SysC {
-            fn dependencies(&self) -> Vec<Dependency> { 
-                vec![
-                    Dependency::Read(SystemId::of::<SysA>()), 
-                    Dependency::Read(SystemId::of::<SysB>()), 
-                ]
-            }
-            fn update(&mut self, systems: &SystemMap) { 
-                self.0 = systems.get::<SysA>().0 + systems.get::<SysB>().0;
+        impl<'a> System<'a> for SysC {
+            type Inputs = (&'a SysA, &'a SysB);
+
+            fn update(&mut self, inputs: Self::Inputs) { 
+                self.0 = inputs.0.0 + inputs.1.0;
             }
         }
 
