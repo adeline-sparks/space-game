@@ -1,10 +1,17 @@
-use std::{any::{Any, TypeId}, collections::{HashMap, HashSet, VecDeque}};
+use std::{any::{Any, TypeId}, collections::{HashMap, HashSet, VecDeque}, cell::RefCell};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
 
 impl SystemId {
-    pub fn of<'a, S: System<'a>>() -> Self { SystemId(TypeId::of::<S>()) }
+    pub fn of<'a, S: System<'a>>() -> Self { Self(TypeId::of::<S>()) }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct EventId(TypeId);
+
+impl EventId {
+    pub fn of<E: Event>() -> Self { Self(TypeId::of::<E>()) }
 }
 
 pub trait System<'a> : 'static {
@@ -22,6 +29,7 @@ pub trait SystemInputs<'a> {
 pub enum Dependency {
     Read(SystemId),
     ReadDelay(SystemId),
+    Emit(EventId),
 }
 
 impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
@@ -44,6 +52,16 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Delay<'a, S> {
 
     fn assemble(systems: &'a SystemMap, _events: &'a EventQueueMap) -> Self {
         Delay(systems.get::<S>())
+    }
+}
+
+impl<'a, E: Event> SystemInputs<'a> for &'a EventQueue<E> {
+    fn write_dependencies(output: &mut Vec<Dependency>) {
+        output.push(Dependency::Emit(EventId::of::<E>()));
+    }
+
+    fn assemble(_systems: &'a SystemMap, events: &'a EventQueueMap) -> Self {
+        events.get()
     }
 }
 
@@ -166,6 +184,7 @@ impl SystemMap {
                     Dependency::ReadDelay(dep_id) => {
                         dep_map.entry(dep_id).or_default().push(sys_id);
                     }
+                    Dependency::Emit(_) => (),
                 }
             }
         }
@@ -203,15 +222,38 @@ impl SystemMap {
     }
 }
 
-pub trait Event: 'static { }
+pub trait Event: Default + 'static { }
 
-pub struct EventQueue<E: Event>(VecDeque<E>);
+#[derive(Default)]
+pub struct EventQueue<E>(RefCell<VecDeque<E>>);
 
-trait AnyEventQueue: 'static { }
+impl<E: Event> EventQueue<E> {
+    pub fn push(&self, val: E) {
+        self.0.borrow_mut().push_back(val);
+    }
+
+    pub fn pop(&self) -> E {
+        self.0.borrow_mut().pop_front().unwrap()
+    }
+}
 
 #[derive(Default)]
 pub struct EventQueueMap {
-    queues: HashMap<TypeId, Box<dyn AnyEventQueue>>,
+    queues: HashMap<EventId, Box<dyn Any>>,
+}
+
+impl EventQueueMap {
+    pub fn register<E: Event>(&mut self) {
+        self.queues.insert(
+            EventId::of::<E>(), 
+            Box::new(EventQueue::<E>::default()));
+    }
+
+    fn get<E: Event>(&self) -> &EventQueue<E> {
+        self.queues[&EventId::of::<E>()]
+            .downcast_ref::<EventQueue<E>>()
+            .unwrap()
+    }
 }
 
 #[derive(Default)]
@@ -231,6 +273,14 @@ impl World {
     pub fn systems_mut(&mut self) -> &mut SystemMap { 
         self.topological_order = None;
         &mut self.systems
+    }
+
+    pub fn events(&self) -> &EventQueueMap { 
+        &self.event_queues
+    }
+
+    pub fn events_mut(&mut self) -> &mut EventQueueMap { 
+        &mut self.event_queues
     }
 
     pub fn update(&mut self) {
@@ -256,16 +306,22 @@ mod test {
         struct SysB(u32);
         struct SysC(u32);
 
+        #[derive(Clone, Default, Debug, Eq, PartialEq)]
+        struct Ev(u32);
+
         impl<'a> System<'a> for SysA {
             type Inputs = Delay<'a, SysC>;
 
-            fn update(&mut self, systems: Self::Inputs) { self.0 = systems.0.0; }
+            fn update(&mut self, inputs: Self::Inputs) { self.0 = inputs.0.0; }
         }
 
         impl<'a> System<'a> for SysB {
-            type Inputs = ();
+            type Inputs = &'a EventQueue<Ev>;
 
-            fn update(&mut self, _systems: ()) { self.0 += 2; }
+            fn update(&mut self, inputs: Self::Inputs) {
+                self.0 += 2; 
+                inputs.push(Ev(self.0));
+            }
         }
 
         impl<'a> System<'a> for SysC {
@@ -276,16 +332,20 @@ mod test {
             }
         }
 
+        impl Event for Ev { }
+
         let mut world = World::new();
         world.systems_mut().insert(SysA(0));
         world.systems_mut().insert(SysB(0));
         world.systems_mut().insert(SysC(0));
+        world.events_mut().register::<Ev>();
 
         let mut val = 0;
         for i in 0..10 {
             world.update();
             val += 2*(i+1);
             assert_eq!(world.systems().get::<SysC>().0, val);
+            assert_eq!(world.events_mut().get::<Ev>().pop().0, 2 * (i+1));
         }
     }
 }
