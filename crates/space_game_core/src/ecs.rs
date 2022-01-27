@@ -4,9 +4,13 @@ pub use self::system::{SystemMap, SystemId, System, SystemInputs, Dependency, De
 mod event;
 pub use self::event::{AnyEvent, Event, EventId, EventQueue, EventQueueMap};
 
+mod call;
+pub use self::call::CallQueueMap;
+
 #[derive(Default)]
 pub struct World {
     systems: SystemMap,
+    call_queues: CallQueueMap,
     event_queues: EventQueueMap,
     topological_order: Option<Vec<SystemId>>,
 }
@@ -38,7 +42,8 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            sys.any_update(&self.systems, &mut self.event_queues);
+            self.call_queues.get_any(id.type_id()).run_any(sys.as_any_mut());
+            sys.any_update(&self.systems, &self.event_queues, &self.call_queues); // TODO just pass &World ?
             self.systems.untake_any(sys);
         }
 

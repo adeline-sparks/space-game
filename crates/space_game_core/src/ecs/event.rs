@@ -1,6 +1,6 @@
 use std::{any::{TypeId, Any}, collections::{VecDeque, HashMap}, cell::RefCell};
 
-use super::{Dependency, SystemInputs, SystemMap};
+use super::{Dependency, SystemInputs, SystemMap, CallQueueMap};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct EventId(TypeId);
@@ -42,7 +42,7 @@ impl<'a, E: Event> SystemInputs<'a> for &'a EventQueue<E> {
         output.push(Dependency::Emit(EventId::of::<E>()));
     }
 
-    fn assemble(_systems: &'a SystemMap, events: &'a EventQueueMap) -> Self {
+    fn assemble(_systems: &'a SystemMap, events: &'a EventQueueMap, _calls: &'a CallQueueMap) -> Self {
         events.get()
     }
 }
