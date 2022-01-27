@@ -18,6 +18,7 @@ pub trait System<'a> : 'static {
     type Inputs: SystemInputs<'a>;
 
     fn update(&mut self, inputs: Self::Inputs);
+    fn on_event(&mut self, _event: &dyn Any) { } // TODO AnyEvent
 }
 
 pub trait SystemInputs<'a> {
@@ -88,7 +89,8 @@ pub struct SystemMap {
 
 trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
-    fn assemble_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap);
+    fn any_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap);
+    fn any_event(&mut self, ev: &dyn Any);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -104,8 +106,12 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         result
     }
 
-    fn assemble_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap) {
+    fn any_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap) {
         self.update(S::Inputs::assemble(systems, events));
+    }
+
+    fn any_event(&mut self, ev: &dyn Any) {
+        self.on_event(ev);
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -220,26 +226,49 @@ impl SystemMap {
 
         Ok(result)
     }
+
+    fn iter_systems_mut(&mut self) -> impl Iterator<Item=&mut DynAnySystem> {
+        self.systems.values_mut().map(|slot| slot.as_mut().unwrap().as_mut())
+    }
 }
 
-pub trait Event: Default + 'static { }
+pub trait Event: 'static + Any { }
 
-#[derive(Default)]
 pub struct EventQueue<E>(RefCell<VecDeque<E>>);
+
+impl<E> Default for EventQueue<E> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
 
 impl<E: Event> EventQueue<E> {
     pub fn push(&self, val: E) {
         self.0.borrow_mut().push_back(val);
     }
-
-    pub fn pop(&self) -> E {
-        self.0.borrow_mut().pop_front().unwrap()
-    }
 }
 
 #[derive(Default)]
 pub struct EventQueueMap {
-    queues: HashMap<EventId, Box<dyn Any>>,
+    queues: HashMap<EventId, Box<dyn AnyEventQueue>>
+}
+
+trait AnyEventQueue {
+    fn len(&self) -> usize;
+    fn pop_any(&self) -> Option<Box<dyn Any>>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<E: 'static> AnyEventQueue for EventQueue<E> {
+    fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+    fn pop_any(&self) -> Option<Box<dyn Any>> {
+        Some(Box::new(self.0.borrow_mut().pop_front()?))
+    }
+
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 impl EventQueueMap {
@@ -251,8 +280,13 @@ impl EventQueueMap {
 
     fn get<E: Event>(&self) -> &EventQueue<E> {
         self.queues[&EventId::of::<E>()]
+            .as_any()
             .downcast_ref::<EventQueue<E>>()
             .unwrap()
+    }
+
+    fn iter(&self) -> impl Iterator<Item=&dyn AnyEventQueue> {
+        self.queues.values().map(|v| v.as_ref())
     }
 }
 
@@ -290,8 +324,25 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            sys.assemble_update(&self.systems, &mut self.event_queues);
+            sys.any_update(&self.systems, &mut self.event_queues);
             self.systems.untake_any(sys);
+        }
+
+        loop {
+            let mut no_events = true;
+            for queue in self.event_queues.iter() {
+                for _ in 0..queue.len() {
+                    no_events = false;
+                    let ev = queue.pop_any().unwrap();
+                    for sys in self.systems.iter_systems_mut() {
+                        sys.any_event(ev.as_ref());
+                    }
+                }
+            }
+
+            if no_events {
+                break;
+            }
         }
     }
 }
@@ -345,7 +396,6 @@ mod test {
             world.update();
             val += 2*(i+1);
             assert_eq!(world.systems().get::<SysC>().0, val);
-            assert_eq!(world.events_mut().get::<Ev>().pop().0, 2 * (i+1));
         }
     }
 }
