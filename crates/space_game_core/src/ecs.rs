@@ -18,7 +18,7 @@ pub trait System<'a> : 'static {
     type Inputs: SystemInputs<'a>;
 
     fn update(&mut self, inputs: Self::Inputs);
-    fn on_event(&mut self, _event: &dyn Any) { } // TODO AnyEvent
+    fn on_event(&mut self, _event: &dyn AnyEvent) { }
 }
 
 pub trait SystemInputs<'a> {
@@ -90,7 +90,7 @@ pub struct SystemMap {
 trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
     fn any_update(&mut self, systems: &'a SystemMap, events: &'a mut EventQueueMap);
-    fn any_event(&mut self, ev: &dyn Any);
+    fn any_event(&mut self, ev: &dyn AnyEvent);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -110,7 +110,7 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         self.update(S::Inputs::assemble(systems, events));
     }
 
-    fn any_event(&mut self, ev: &dyn Any) {
+    fn any_event(&mut self, ev: &dyn AnyEvent) {
         self.on_event(ev);
     }
 
@@ -233,6 +233,13 @@ impl SystemMap {
 }
 
 pub trait Event: 'static + Any { }
+pub trait AnyEvent: Event {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<E: Event> AnyEvent for E {
+    fn as_any(&self) -> &dyn Any { self }
+}
 
 pub struct EventQueue<E>(RefCell<VecDeque<E>>);
 
@@ -256,15 +263,15 @@ pub struct EventQueueMap {
 
 trait AnyEventQueue {
     fn len(&self) -> usize;
-    fn pop_any(&self) -> Option<Box<dyn Any>>;
+    fn pop_any(&self) -> Option<Box<dyn AnyEvent>>;
     fn as_any(&self) -> &dyn Any;
 }
 
-impl<E: 'static> AnyEventQueue for EventQueue<E> {
+impl<E: Event> AnyEventQueue for EventQueue<E> {
     fn len(&self) -> usize {
         self.0.borrow().len()
     }
-    fn pop_any(&self) -> Option<Box<dyn Any>> {
+    fn pop_any(&self) -> Option<Box<dyn AnyEvent>> {
         Some(Box::new(self.0.borrow_mut().pop_front()?))
     }
 
@@ -370,8 +377,12 @@ mod test {
             type Inputs = &'a EventQueue<Ev>;
 
             fn update(&mut self, inputs: Self::Inputs) {
-                self.0 += 2; 
-                inputs.push(Ev(self.0));
+                inputs.push(Ev(self.0 + 2));
+            }
+
+            fn on_event(&mut self, event: &dyn AnyEvent) {
+                let e: &Ev = event.as_any().downcast_ref().unwrap();
+                self.0 = e.0;
             }
         }
 
@@ -394,7 +405,7 @@ mod test {
         let mut val = 0;
         for i in 0..10 {
             world.update();
-            val += 2*(i+1);
+            val += 2*i;
             assert_eq!(world.systems().get::<SysC>().0, val);
         }
     }
