@@ -1,6 +1,6 @@
 use std::{any::{TypeId, Any}, collections::HashMap, cell::RefCell};
 
-use super::{System, SystemInputs, Dependency, SystemId};
+use super::{System, SystemInputs, Dependency, SystemId, World};
 
 pub struct CallQueue<T>(RefCell<Vec<Box<dyn FnOnce(&mut T)>>>);
 
@@ -30,8 +30,8 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Call<'a, S> {
         output.push(Dependency::Call(SystemId::of::<S>()));
     }
 
-    fn assemble(_systems: &'a super::SystemMap, _events: &'a super::EventQueueMap, calls: &'a CallQueueMap) -> Self {
-        Call(calls.get())
+    fn assemble(world: &'a World) -> Self {
+        Call(world.call_queues.get())
     }
 }
 

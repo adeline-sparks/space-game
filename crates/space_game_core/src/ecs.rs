@@ -36,16 +36,17 @@ impl World {
     }
 
     pub fn update(&mut self) {
-        let order = self.topological_order
-            .get_or_insert_with(|| self.systems.topological_order().unwrap())
-            .as_slice();
+        let order = self.topological_order.take()
+            .unwrap_or_else(|| self.systems.topological_order().unwrap());
 
-        for &id in order {
+        for &id in &order {
             let mut sys = self.systems.take_any(id);
             self.call_queues.get_any(id.type_id()).run_any(sys.as_any_mut());
-            sys.any_update(&self.systems, &self.event_queues, &self.call_queues); // TODO just pass &World ?
+            sys.any_update(&self);
             self.systems.untake_any(sys);
         }
+
+        self.topological_order = Some(order);
 
         loop {
             let mut no_events = true;

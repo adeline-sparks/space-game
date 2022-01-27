@@ -1,6 +1,6 @@
 use std::{any::{TypeId, Any}, collections::{HashMap, HashSet}, ops::Deref};
 
-use super::{AnyEvent, EventQueueMap, EventId, CallQueueMap};
+use super::{AnyEvent, EventId, World};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
@@ -20,7 +20,7 @@ pub trait System<'a> : 'static {
 
 pub trait SystemInputs<'a> {
     fn write_dependencies(output: &mut Vec<Dependency>);
-    fn assemble(systems: &'a SystemMap, events: &'a EventQueueMap, calls: &'a CallQueueMap) -> Self;
+    fn assemble(world: &'a World) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -36,14 +36,14 @@ impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
         output.push(Dependency::Read(SystemId::of::<S>()));
     }
 
-    fn assemble(systems: &'a SystemMap, _events: &'a EventQueueMap, _calls: &'a CallQueueMap) -> Self {
-        systems.get::<S>()
+    fn assemble(world: &'a World) -> Self {
+        world.systems().get::<S>()
     }
 }
 
 impl<'a> SystemInputs<'a> for () {
     fn write_dependencies(_output: &mut Vec<Dependency>) { }
-    fn assemble(_systems: &'a SystemMap, _events: &'a EventQueueMap, _calls: &'a CallQueueMap) -> Self { () }
+    fn assemble(_world: &'a World) -> Self { () }
 }
 
 impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
@@ -52,8 +52,8 @@ impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
         B::write_dependencies(output);
     }
 
-    fn assemble(systems: &'a SystemMap, events: &'a EventQueueMap, calls: &'a CallQueueMap) -> Self {
-        (A::assemble(systems, events, calls), B::assemble(systems, events, calls))
+    fn assemble(world: &'a World) -> Self {
+        (A::assemble(world), B::assemble(world))
     }
 }
 
@@ -65,8 +65,8 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Delay<'a, S> {
         output.push(Dependency::ReadDelay(SystemId::of::<S>()));
     }
 
-    fn assemble(systems: &'a SystemMap, _events: &'a EventQueueMap, _calls: &'a CallQueueMap) -> Self {
-        Delay(systems.get::<S>())
+    fn assemble(world: &'a World) -> Self {
+        Delay(world.systems.get::<S>())
     }
 }
 
@@ -83,7 +83,7 @@ pub struct SystemMap {
 
 pub trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
-    fn any_update(&mut self, systems: &'a SystemMap, events: &'a EventQueueMap, calls: &'a CallQueueMap);
+    fn any_update(&mut self, world: &'a World);
     fn any_event(&mut self, ev: &dyn AnyEvent);
 
     fn as_any(&self) -> &dyn Any;
@@ -100,8 +100,8 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         result
     }
 
-    fn any_update(&mut self, systems: &'a SystemMap, events: &'a EventQueueMap, calls: &'a CallQueueMap) {
-        self.update(S::Inputs::assemble(systems, events, calls));
+    fn any_update(&mut self, world: &'a World) {
+        self.update(S::Inputs::assemble(world));
     }
 
     fn any_event(&mut self, ev: &dyn AnyEvent) {
