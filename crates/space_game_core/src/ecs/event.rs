@@ -1,4 +1,4 @@
-use std::{any::{TypeId, Any}, collections::{VecDeque, HashMap}, cell::RefCell};
+use std::{any::{TypeId, Any}, collections::{VecDeque}, cell::{RefCell}, marker::PhantomData};
 
 use super::{Dependency, SystemInputs, World};
 
@@ -11,79 +11,49 @@ impl EventId {
 
 pub trait Event: 'static + Any { }
 pub trait AnyEvent: Event {
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any>;
     fn as_any(&self) -> &dyn Any;
 }
 
 impl<E: Event> AnyEvent for E {
+    fn as_any_box(self: Box<Self>) -> Box<dyn Any> { self }
     fn as_any(&self) -> &dyn Any { self }
 }
 
-pub struct EventQueue<E>(RefCell<VecDeque<E>>);
-
-impl<E> Default for EventQueue<E> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
+pub struct EventQueue<'a, E> {
+    storage: &'a RefCell<VecDeque<Box<dyn AnyEvent>>>,
+    _phantom: PhantomData<&'a E>,
 }
 
-
-impl<E: Event> EventQueue<E> {
+impl<'a, E: Event> EventQueue<'a, E> {
     pub fn push(&self, val: E) {
-        self.0.borrow_mut().push_back(val);
+        self.storage.borrow_mut().push_back(Box::new(val));
     }
 
     pub fn pop(&self) -> Option<E> {
-        self.0.borrow_mut().pop_front()
+        self.storage.borrow_mut().pop_front().map(|x| *x.as_any_box().downcast::<E>().unwrap())
     }
 }
 
-impl<'a, E: Event> SystemInputs<'a> for &'a EventQueue<E> {
+impl<'a, E: Event> SystemInputs<'a> for EventQueue<'a, E> {
     fn write_dependencies(output: &mut Vec<Dependency>) {
         output.push(Dependency::Emit(EventId::of::<E>()));
     }
 
     fn assemble(world: &'a World) -> Self {
-        world.event_queues.get()
+        world.event_queues.get::<E>()
     }
 }
 
 #[derive(Default)]
-pub struct EventQueueMap {
-    queues: HashMap<EventId, Box<dyn AnyEventQueue>>
-}
-
-pub trait AnyEventQueue {
-    fn len(&self) -> usize;
-    fn pop_any(&self) -> Option<Box<dyn AnyEvent>>;
-    fn as_any(&self) -> &dyn Any;
-}
-
-impl<E: Event> AnyEventQueue for EventQueue<E> {
-    fn len(&self) -> usize {
-        self.0.borrow().len()
-    }
-    fn pop_any(&self) -> Option<Box<dyn AnyEvent>> {
-        Some(Box::new(self.0.borrow_mut().pop_front()?))
-    }
-
-    fn as_any(&self) -> &dyn Any { self }
-}
+pub struct EventQueueMap(RefCell<VecDeque<Box<dyn AnyEvent>>>);
 
 impl EventQueueMap {
-    pub fn register<E: Event>(&mut self) {
-        self.queues.insert(
-            EventId::of::<E>(), 
-            Box::new(EventQueue::<E>::default()));
+    pub fn get<E: Event>(&self) -> EventQueue<'_, E> {
+        EventQueue { storage: &self.0, _phantom: PhantomData }
     }
 
-    pub fn get<E: Event>(&self) -> &EventQueue<E> {
-        self.queues[&EventId::of::<E>()]
-            .as_any()
-            .downcast_ref::<EventQueue<E>>()
-            .unwrap()
-    }
+    pub fn pop_any(&self) -> Option<Box<dyn AnyEvent>> { self.0.borrow_mut().pop_front() }
 
-    pub fn iter(&self) -> impl Iterator<Item=&dyn AnyEventQueue> {
-        self.queues.values().map(|v| v.as_ref())
-    }
+    pub fn len(&self) -> usize { self.0.borrow().len() }
 }

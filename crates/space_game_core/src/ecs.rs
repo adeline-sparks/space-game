@@ -38,10 +38,6 @@ impl World {
         self.systems.get_mut()
     }
 
-    pub fn register<E: Event>(&mut self) {
-        self.event_queues.register::<E>();
-    }
-
     pub fn update(&mut self) {
         let order = self.topological_order.take()
             .unwrap_or_else(|| self.systems.topological_order().unwrap());
@@ -56,24 +52,16 @@ impl World {
         self.topological_order = Some(order);
 
         loop {
-            let mut no_events = true;
-            for queue in self.event_queues.iter() {
-                let len = queue.len();
-                if len == 0 {
-                    continue;
-                }
-
-                no_events = false;
-                for _ in 0..len {
-                    let ev = queue.pop_any().unwrap();
-                    for sys in self.systems.iter_systems_mut() {
-                        sys.any_event(ev.as_ref());
-                    }
-                }
+            let len = self.event_queues.len();
+            if len == 0 {
+                break;
             }
 
-            if no_events {
-                break;
+            for _ in 0..len {
+                let ev = self.event_queues.pop_any().unwrap();
+                for sys in self.systems.iter_systems_mut() {
+                    sys.any_event(ev.as_ref());
+                }
             }
         }
     }
@@ -99,7 +87,7 @@ mod test {
         }
 
         impl<'a> System<'a> for SysB {
-            type Inputs = &'a EventQueue<Ev>;
+            type Inputs = EventQueue<'a, Ev>;
 
             fn update(&mut self, inputs: Self::Inputs) {
                 inputs.push(Ev(self.0 + 2));
@@ -125,7 +113,6 @@ mod test {
         world.insert(SysA(0));
         world.insert(SysB(0));
         world.insert(SysC(0));
-        world.register::<Ev>();
 
         let mut val = 0;
         for i in 0..10 {
