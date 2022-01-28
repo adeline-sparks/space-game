@@ -18,6 +18,11 @@ pub struct World {
 impl World {
     pub fn new() -> Self { Default::default() }
 
+    pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) {
+        self.systems.insert(sys);
+        self.call_queues.register::<S>();
+    }
+
     pub fn systems(&self) -> &SystemMap { 
         &self.systems 
     }
@@ -115,9 +120,9 @@ mod test {
         impl Event for Ev { }
 
         let mut world = World::new();
-        world.systems_mut().insert(SysA(0));
-        world.systems_mut().insert(SysB(0));
-        world.systems_mut().insert(SysC(0));
+        world.insert(SysA(0));
+        world.insert(SysB(0));
+        world.insert(SysC(0));
         world.events_mut().register::<Ev>();
 
         let mut val = 0;

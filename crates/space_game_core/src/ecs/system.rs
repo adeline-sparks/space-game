@@ -1,5 +1,7 @@
 use std::{any::{TypeId, Any}, collections::{HashMap, HashSet}, ops::Deref};
 
+use impl_trait_for_tuples::impl_for_tuples;
+
 use super::{AnyEvent, EventId, World};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -41,19 +43,14 @@ impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
     }
 }
 
-impl<'a> SystemInputs<'a> for () {
-    fn write_dependencies(_output: &mut Vec<Dependency>) { }
-    fn assemble(_world: &'a World) -> Self { () }
-}
-
-impl<'a, A: SystemInputs<'a>, B: SystemInputs<'a>> SystemInputs<'a> for (A, B) {
+#[impl_for_tuples(5)]
+impl<'a> SystemInputs<'a> for Tuple {
     fn write_dependencies(output: &mut Vec<Dependency>) {
-        A::write_dependencies(output);
-        B::write_dependencies(output);
+        for_tuples!(#(Tuple::write_dependencies(output);)*);
     }
 
     fn assemble(world: &'a World) -> Self {
-        (A::assemble(world), B::assemble(world))
+        (for_tuples!(#(Tuple::assemble(world)),*))
     }
 }
 
