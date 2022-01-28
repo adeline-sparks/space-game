@@ -19,25 +19,27 @@ impl World {
     pub fn new() -> Self { Default::default() }
 
     pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) {
+        self.topological_order = None;
         self.systems.insert(sys);
         self.call_queues.register::<S>();
     }
 
-    pub fn systems(&self) -> &SystemMap { 
-        &self.systems 
-    }
-
-    pub fn systems_mut(&mut self) -> &mut SystemMap { 
+    pub fn remove<'a, S: System<'a>>(&mut self) -> S {
         self.topological_order = None;
-        &mut self.systems
+        self.call_queues.unregister::<S>();
+        self.systems.remove()
+    }
+    
+    pub fn get<'a, S: System<'a>>(&self) -> &S {
+        self.systems.get()
     }
 
-    pub fn events(&self) -> &EventQueueMap { 
-        &self.event_queues
+    pub fn get_mut<'a, S: System<'a>>(&mut self) -> &mut S {
+        self.systems.get_mut()
     }
 
-    pub fn events_mut(&mut self) -> &mut EventQueueMap { 
-        &mut self.event_queues
+    pub fn register<E: Event>(&mut self) {
+        self.event_queues.register::<E>();
     }
 
     pub fn update(&mut self) {
@@ -123,13 +125,13 @@ mod test {
         world.insert(SysA(0));
         world.insert(SysB(0));
         world.insert(SysC(0));
-        world.events_mut().register::<Ev>();
+        world.register::<Ev>();
 
         let mut val = 0;
         for i in 0..10 {
             world.update();
             val += 2*i;
-            assert_eq!(world.systems().get::<SysC>().0, val);
+            assert_eq!(world.get::<SysC>().0, val);
         }
     }
 }

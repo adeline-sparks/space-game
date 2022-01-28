@@ -39,7 +39,7 @@ impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
     }
 
     fn assemble(world: &'a World) -> Self {
-        world.systems().get::<S>()
+        world.get::<S>()
     }
 }
 
@@ -148,6 +148,16 @@ impl SystemMap {
             .expect("Can't get system that was taken")
             .as_any()
             .downcast_ref()
+            .unwrap()
+    }
+
+    pub fn get_mut<'a, S: System<'a>>(&mut self) -> &mut S { 
+        self.systems.get_mut(&SystemId::of::<S>())
+            .expect("Can't get system that was not inserted")
+            .as_mut()
+            .expect("Can't get system that was taken")
+            .as_any_mut()
+            .downcast_mut()
             .unwrap()
     }
 

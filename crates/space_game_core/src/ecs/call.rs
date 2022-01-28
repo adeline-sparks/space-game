@@ -59,6 +59,10 @@ impl CallQueueMap {
         self.0.insert(TypeId::of::<T>(), Box::new(CallQueue::<T>::default()));
     }
 
+    pub fn unregister<T: 'static>(&mut self) {
+        self.0.remove(&TypeId::of::<T>());
+    }
+
     pub fn get<T: 'static>(&self) -> &CallQueue<T> {
         self.0.get(&TypeId::of::<T>()).unwrap().as_any().downcast_ref().unwrap()
     }
@@ -66,4 +70,6 @@ impl CallQueueMap {
     pub fn get_any(&self, id: TypeId) -> &dyn AnyCallQueue {
         self.0.get(&id).unwrap().as_ref()
     }
+
+
 }

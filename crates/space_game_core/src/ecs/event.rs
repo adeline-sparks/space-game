@@ -43,7 +43,7 @@ impl<'a, E: Event> SystemInputs<'a> for &'a EventQueue<E> {
     }
 
     fn assemble(world: &'a World) -> Self {
-        world.events().get()
+        world.event_queues.get()
     }
 }
 
