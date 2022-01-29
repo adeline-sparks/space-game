@@ -51,15 +51,15 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Call<'a, S> {
 pub struct CallQueueMap(HashMap<SystemId, Box<dyn AnyCallQueue>>);
 
 pub trait AnyCallQueue {
-    fn run_any(&self, val: &mut dyn AnySystem);
+    fn run(&self, val: &mut dyn AnySystem);
 
     fn as_any(&self) -> &dyn Any;
 }
 
 impl<T: 'static> AnyCallQueue for CallQueue<T> {
-    fn run_any(&self, val: &mut dyn AnySystem) {
+    fn run(&self, val: &mut dyn AnySystem) {
         if !self.is_empty() {
-            self.run(val.as_any_mut().downcast_mut().unwrap())
+            CallQueue::run(self, val.as_any_mut().downcast_mut().unwrap())
         }
     }
 

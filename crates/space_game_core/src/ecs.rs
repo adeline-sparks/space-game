@@ -2,7 +2,11 @@ mod system;
 pub use self::system::{Delay, Dependency, System, SystemId, SystemInputs, SystemMap};
 
 mod call;
-pub use self::call::{Call, CallQueueMap};
+pub use self::call::Call;
+use self::call::CallQueueMap;
+
+mod entity;
+pub use self::entity::{EntityId, ArchetypeId};
 
 #[derive(Default)]
 pub struct World {
@@ -43,8 +47,8 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            self.call_queues.get_any(id).run_any(sys.as_mut());
-            sys.any_update(&self);
+            self.call_queues.get_any(id).run(sys.as_mut());
+            sys.update(&self);
             self.systems.untake_any(sys);
         }
     }

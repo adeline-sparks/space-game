@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::World;
+use super::{World, EntityId, ArchetypeId};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
@@ -28,7 +28,10 @@ impl From<&DynAnySystem> for SystemId {
 pub trait System<'a>: 'static {
     type Inputs: SystemInputs<'a>;
 
-    fn update(&mut self, _inputs: Self::Inputs) {}
+    fn update(&mut self, _inputs: Self::Inputs);
+
+    fn create_entity(&mut self, _id: EntityId, _arch_id: ArchetypeId) { }
+    fn destroy_entity(&mut self, _id: EntityId) { }
 }
 
 pub trait SystemInputs<'a> {
@@ -92,7 +95,9 @@ pub struct SystemMap {
 
 pub trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
-    fn any_update(&mut self, world: &'a World);
+    fn update(&mut self, world: &'a World);
+    fn create_entity(&mut self, id: EntityId, arch_id: ArchetypeId);
+    fn destory_entity(&mut self, id: EntityId);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -108,8 +113,16 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
         result
     }
 
-    fn any_update(&mut self, world: &'a World) {
-        self.update(S::Inputs::assemble(world));
+    fn update(&mut self, world: &'a World) {
+        S::update(self, S::Inputs::assemble(world));
+    }
+
+    fn create_entity(&mut self, id: EntityId, arch_id: ArchetypeId) {
+        S::create_entity(self, id, arch_id)
+    }
+
+    fn destory_entity(&mut self, id: EntityId) {
+        S::destroy_entity(self, id)
     }
 
     fn as_any(&self) -> &dyn Any {
