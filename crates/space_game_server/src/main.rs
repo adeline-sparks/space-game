@@ -1,14 +1,13 @@
 use std::net::SocketAddr;
 use std::path::Path;
 
+use axum::extract::ws::WebSocketUpgrade;
+use axum::http::StatusCode;
+use axum::routing::{get, get_service};
+use axum::Router;
 use clap::Parser;
-use axum::{
-    extract::ws::{WebSocketUpgrade},
-    routing::{get, get_service},
-    Router, http::StatusCode,
-};
-use tower_http::services::ServeDir;
 use futures_util::StreamExt;
+use tower_http::services::ServeDir;
 
 #[derive(Parser)]
 #[clap()]
@@ -33,9 +32,12 @@ async fn main() {
             println!("Closed");
         })
     });
-    let serve_space_game = get_service(ServeDir::new(&args.space_game_pkg))
-        .handle_error(|err| async move { 
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Unhandled internal error: {}", err))
+    let serve_space_game =
+        get_service(ServeDir::new(&args.space_game_pkg)).handle_error(|err| async move {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Unhandled internal error: {}", err),
+            )
         });
     let app = Router::new()
         .route("/ws/v1", handle_ws)

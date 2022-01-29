@@ -1,6 +1,8 @@
-use std::{any::{TypeId, Any}, collections::HashMap, cell::RefCell};
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
-use super::{System, SystemInputs, Dependency, SystemId, World};
+use super::{Dependency, System, SystemId, SystemInputs, World};
 
 pub struct CallQueue<T>(RefCell<Vec<Box<dyn FnOnce(&mut T)>>>);
 
@@ -11,7 +13,7 @@ impl<T> Default for CallQueue<T> {
 }
 
 impl<T> CallQueue<T> {
-    pub fn post<F: FnOnce(&mut T) + 'static>(&self, func: F) {
+    pub fn post(&self, func: impl FnOnce(&mut T) + 'static) {
         self.0.borrow_mut().push(Box::new(func))
     }
 
@@ -23,10 +25,16 @@ impl<T> CallQueue<T> {
     }
 }
 
-pub struct Call<'a, S>(&'a CallQueue<S>);
+pub struct Call<'a, T>(&'a CallQueue<T>);
+
+impl<'a, T> Call<'a, T> {
+    pub fn post(&self, func: impl FnOnce(&mut T) + 'static) {
+        self.0.post(func)
+    }
+}
 
 impl<'a, S: System<'a>> SystemInputs<'a> for Call<'a, S> {
-    fn write_dependencies(output: &mut Vec<super::Dependency>) {
+    fn write_dependencies(output: &mut Vec<Dependency>) {
         output.push(Dependency::Call(SystemId::of::<S>()));
     }
 
@@ -49,14 +57,19 @@ impl<T: 'static> AnyCallQueue for CallQueue<T> {
         self.run(val.downcast_mut().unwrap())
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl CallQueueMap {
-    pub fn new() -> Self { Default::default() }
+    pub fn new() -> Self {
+        Default::default()
+    }
 
     pub fn register<T: 'static>(&mut self) {
-        self.0.insert(TypeId::of::<T>(), Box::new(CallQueue::<T>::default()));
+        self.0
+            .insert(TypeId::of::<T>(), Box::new(CallQueue::<T>::default()));
     }
 
     pub fn unregister<T: 'static>(&mut self) {
@@ -64,12 +77,15 @@ impl CallQueueMap {
     }
 
     pub fn get<T: 'static>(&self) -> &CallQueue<T> {
-        self.0.get(&TypeId::of::<T>()).unwrap().as_any().downcast_ref().unwrap()
+        self.0
+            .get(&TypeId::of::<T>())
+            .unwrap()
+            .as_any()
+            .downcast_ref()
+            .unwrap()
     }
 
     pub fn get_any(&self, id: TypeId) -> &dyn AnyCallQueue {
         self.0.get(&id).unwrap().as_ref()
     }
-
-
 }

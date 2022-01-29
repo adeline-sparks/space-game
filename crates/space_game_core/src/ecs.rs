@@ -1,27 +1,29 @@
 mod system;
-pub use self::system::{SystemMap, SystemId, System, SystemInputs, Dependency, Delay};
+pub use self::system::{Delay, Dependency, System, SystemId, SystemInputs, SystemMap};
 
 mod event;
-pub use self::event::{AnyEvent, Event, EventId, EventQueue, EventQueueMap};
+pub use self::event::{AnyEvent, Emit, Event, EventId, EventQueue};
 
 mod call;
-pub use self::call::CallQueueMap;
+pub use self::call::{Call, CallQueueMap};
 
 #[derive(Default)]
 pub struct World {
     systems: SystemMap,
     call_queues: CallQueueMap,
-    event_queues: EventQueueMap,
+    event_queue: EventQueue,
     topological_order: Option<Vec<SystemId>>,
 }
 
 impl World {
-    pub fn new() -> Self { Default::default() }
+    pub fn new() -> Self {
+        Default::default()
+    }
 
     pub fn insert<S: for<'a> System<'a>>(&mut self, sys: S) {
         self.topological_order = None;
-        self.systems.insert(sys);
         self.call_queues.register::<S>();
+        self.systems.insert(sys);
     }
 
     pub fn remove<'a, S: System<'a>>(&mut self) -> S {
@@ -29,7 +31,7 @@ impl World {
         self.call_queues.unregister::<S>();
         self.systems.remove()
     }
-    
+
     pub fn get<'a, S: System<'a>>(&self) -> &S {
         self.systems.get()
     }
@@ -39,28 +41,29 @@ impl World {
     }
 
     pub fn update(&mut self) {
-        let order = self.topological_order.take()
-            .unwrap_or_else(|| self.systems.topological_order().unwrap());
+        self.topological_order
+            .get_or_insert_with(|| self.systems.topological_order().unwrap());
+        let order = self.topological_order.as_ref().unwrap().as_slice();
 
-        for &id in &order {
+        for &id in order {
             let mut sys = self.systems.take_any(id);
-            self.call_queues.get_any(id.type_id()).run_any(sys.as_any_mut());
+            self.call_queues
+                .get_any(id.type_id())
+                .run_any(sys.as_any_mut());
             sys.any_update(&self);
             self.systems.untake_any(sys);
         }
 
-        self.topological_order = Some(order);
-
         loop {
-            let len = self.event_queues.len();
+            let len = self.event_queue.len();
             if len == 0 {
                 break;
             }
 
             for _ in 0..len {
-                let ev = self.event_queues.pop_any().unwrap();
+                let ev = AnyEvent::from(self.event_queue.pop().unwrap());
                 for sys in self.systems.iter_systems_mut() {
-                    sys.any_event(ev.as_ref());
+                    sys.any_event(&ev);
                 }
             }
         }
@@ -83,31 +86,34 @@ mod test {
         impl<'a> System<'a> for SysA {
             type Inputs = Delay<'a, SysC>;
 
-            fn update(&mut self, inputs: Self::Inputs) { self.0 = inputs.0; }
+            fn update(&mut self, inputs: Self::Inputs) {
+                self.0 = inputs.0;
+            }
         }
 
         impl<'a> System<'a> for SysB {
-            type Inputs = EventQueue<'a, Ev>;
+            type Inputs = Emit<'a, Ev>;
 
             fn update(&mut self, inputs: Self::Inputs) {
-                inputs.push(Ev(self.0 + 2));
+                inputs.emit(Ev(self.0 + 2));
             }
 
-            fn on_event(&mut self, event: &dyn AnyEvent) {
-                let e: &Ev = event.as_any().downcast_ref().unwrap();
-                self.0 = e.0;
+            fn on_event(&mut self, event: &AnyEvent) {
+                event.handler(|event: &Ev| {
+                    self.0 = event.0;
+                });
             }
         }
 
         impl<'a> System<'a> for SysC {
             type Inputs = (&'a SysA, &'a SysB);
 
-            fn update(&mut self, inputs: Self::Inputs) { 
-                self.0 = inputs.0.0 + inputs.1.0;
+            fn update(&mut self, inputs: Self::Inputs) {
+                self.0 = inputs.0 .0 + inputs.1 .0;
             }
         }
 
-        impl Event for Ev { }
+        impl Event for Ev {}
 
         let mut world = World::new();
         world.insert(SysA(0));
@@ -117,7 +123,7 @@ mod test {
         let mut val = 0;
         for i in 0..10 {
             world.update();
-            val += 2*i;
+            val += 2 * i;
             assert_eq!(world.get::<SysC>().0, val);
         }
     }
