@@ -40,7 +40,7 @@ pub struct Emit<'a, E> {
 
 impl<'a, E: Event> Emit<'a, E> {
     pub fn emit(&self, val: E) {
-        self.queue.push(Box::new(val));
+        self.queue.push(AnyEvent(Box::new(val)));
     }
 }
 
@@ -58,14 +58,14 @@ impl<'a, E: Event> SystemInputs<'a> for Emit<'a, E> {
 }
 
 #[derive(Default)]
-pub struct EventQueue(RefCell<VecDeque<Box<dyn Any>>>);
+pub struct EventQueue(RefCell<VecDeque<AnyEvent>>);
 
 impl EventQueue {
-    pub fn push(&self, ev: Box<dyn Any>) {
+    pub fn push(&self, ev: AnyEvent) {
         self.0.borrow_mut().push_back(ev);
     }
 
-    pub fn pop(&self) -> Option<Box<dyn Any>> {
+    pub fn pop(&self) -> Option<AnyEvent> {
         self.0.borrow_mut().pop_front()
     }
 
