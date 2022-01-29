@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -44,7 +44,7 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Call<'a, S> {
 }
 
 #[derive(Default)]
-pub struct CallQueueMap(HashMap<TypeId, Box<dyn AnyCallQueue>>);
+pub struct CallQueueMap(HashMap<SystemId, Box<dyn AnyCallQueue>>);
 
 pub trait AnyCallQueue {
     fn run_any(&self, val: &mut dyn Any);
@@ -67,25 +67,25 @@ impl CallQueueMap {
         Default::default()
     }
 
-    pub fn register<T: 'static>(&mut self) {
+    pub fn register<'a, S: System<'a>>(&mut self) {
         self.0
-            .insert(TypeId::of::<T>(), Box::new(CallQueue::<T>::default()));
+            .insert(SystemId::of::<S>(), Box::new(CallQueue::<S>::default()));
     }
 
-    pub fn unregister<T: 'static>(&mut self) {
-        self.0.remove(&TypeId::of::<T>());
+    pub fn unregister<'a, S: System<'a>>(&mut self) {
+        self.0.remove(&SystemId::of::<S>());
     }
 
-    pub fn get<T: 'static>(&self) -> &CallQueue<T> {
+    pub fn get<'a, S: System<'a>>(&self) -> &CallQueue<S> {
         self.0
-            .get(&TypeId::of::<T>())
+            .get(&SystemId::of::<S>())
             .unwrap()
             .as_any()
             .downcast_ref()
             .unwrap()
     }
 
-    pub fn get_any(&self, id: TypeId) -> &dyn AnyCallQueue {
+    pub fn get_any(&self, id: SystemId) -> &dyn AnyCallQueue {
         self.0.get(&id).unwrap().as_ref()
     }
 }

@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::{EventId, World, AnyEvent};
+use super::{AnyEvent, EventId, World};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
@@ -16,6 +16,12 @@ impl SystemId {
 
     pub fn type_id(self) -> TypeId {
         self.0
+    }
+}
+
+impl From<&DynAnySystem> for SystemId {
+    fn from(sys: &DynAnySystem) -> Self {
+        SystemId(sys.as_any().type_id())
     }
 }
 
@@ -123,12 +129,6 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
 
     fn as_any_box(self: Box<Self>) -> Box<dyn Any> {
         self
-    }
-}
-
-impl From<&DynAnySystem> for SystemId {
-    fn from(sys: &DynAnySystem) -> Self {
-        SystemId(sys.as_any().type_id())
     }
 }
 
