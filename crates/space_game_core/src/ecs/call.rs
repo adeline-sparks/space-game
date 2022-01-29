@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use super::{Dependency, System, SystemId, SystemInputs, World};
+use super::{Dependency, System, SystemId, SystemInputs, World, system::AnySystem};
 
 pub struct CallQueue<T>(RefCell<Vec<Box<dyn FnOnce(&mut T)>>>);
 
@@ -17,9 +17,13 @@ impl<T> CallQueue<T> {
         self.0.borrow_mut().push(Box::new(func))
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
+
     pub fn run(&self, val: &mut T) {
-        let len = self.0.borrow().len();
-        for func in self.0.borrow_mut().drain(0..len) {
+        let mut vec = self.0.borrow_mut();
+        while let Some(func) = vec.pop() {
             func(val);
         }
     }
@@ -47,14 +51,16 @@ impl<'a, S: System<'a>> SystemInputs<'a> for Call<'a, S> {
 pub struct CallQueueMap(HashMap<SystemId, Box<dyn AnyCallQueue>>);
 
 pub trait AnyCallQueue {
-    fn run_any(&self, val: &mut dyn Any);
+    fn run_any(&self, val: &mut dyn AnySystem);
 
     fn as_any(&self) -> &dyn Any;
 }
 
 impl<T: 'static> AnyCallQueue for CallQueue<T> {
-    fn run_any(&self, val: &mut dyn Any) {
-        self.run(val.downcast_mut().unwrap())
+    fn run_any(&self, val: &mut dyn AnySystem) {
+        if !self.is_empty() {
+            self.run(val.as_any_mut().downcast_mut().unwrap())
+        }
     }
 
     fn as_any(&self) -> &dyn Any {

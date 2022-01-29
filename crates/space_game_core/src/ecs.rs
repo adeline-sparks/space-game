@@ -43,7 +43,7 @@ impl World {
 
         for &id in order {
             let mut sys = self.systems.take_any(id);
-            self.call_queues.get_any(id).run_any(sys.as_any_mut());
+            self.call_queues.get_any(id).run_any(sys.as_mut());
             sys.any_update(&self);
             self.systems.untake_any(sys);
         }
