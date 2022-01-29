@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::{AnyEvent, EventId, World};
+use super::World;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SystemId(TypeId);
@@ -28,8 +28,7 @@ impl From<&DynAnySystem> for SystemId {
 pub trait System<'a>: 'static {
     type Inputs: SystemInputs<'a>;
 
-    fn update(&mut self, inputs: Self::Inputs);
-    fn on_event(&mut self, _event: &AnyEvent) {}
+    fn update(&mut self, _inputs: Self::Inputs) {}
 }
 
 pub trait SystemInputs<'a> {
@@ -42,7 +41,6 @@ pub enum Dependency {
     Read(SystemId),
     ReadDelay(SystemId),
     Call(SystemId),
-    Emit(EventId),
 }
 
 impl<'a, S: System<'a>> SystemInputs<'a> for &'a S {
@@ -95,7 +93,6 @@ pub struct SystemMap {
 pub trait AnySystem<'a> {
     fn dependencies(&self) -> Vec<Dependency>;
     fn any_update(&mut self, world: &'a World);
-    fn any_event(&mut self, ev: &'a AnyEvent);
 
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -113,10 +110,6 @@ impl<'a, S: System<'a>> AnySystem<'a> for S {
 
     fn any_update(&mut self, world: &'a World) {
         self.update(S::Inputs::assemble(world));
-    }
-
-    fn any_event(&mut self, ev: &AnyEvent) {
-        self.on_event(ev);
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -214,7 +207,6 @@ impl SystemMap {
                     Dependency::ReadDelay(dep_id) | Dependency::Call(dep_id) => {
                         dep_map.entry(dep_id).or_default().push(sys_id);
                     }
-                    Dependency::Emit(_) => (),
                 }
             }
         }
