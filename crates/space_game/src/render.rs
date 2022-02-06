@@ -17,7 +17,9 @@ pub enum DataType {
     Float,
     Vec2,
     Vec3,
+    Vec4,
     Mat3x3,
+    Mat4x4,
     Int,
     Sampler2D,
 }
@@ -28,7 +30,9 @@ impl DataType {
             Self::Float => 1,
             Self::Vec2 => 2,
             Self::Vec3 => 3,
-            Self::Mat3x3 => 9,
+            Self::Vec4 => 4,
+            Self::Mat3x3 => 3 * 3,
+            Self::Mat4x4 => 4 * 4,
             Self::Int => 1,
             Self::Sampler2D => 1,
         }
@@ -37,9 +41,11 @@ impl DataType {
     pub fn num_bytes(self) -> usize {
         match self {
             Self::Float => 4,
-            Self::Vec2 => 8,
-            Self::Vec3 => 12,
-            Self::Mat3x3 => 36,
+            Self::Vec2 => 2 * 4,
+            Self::Vec3 => 3 * 4,
+            Self::Vec4 => 4 * 4,
+            Self::Mat3x3 => 3 * 3 * 4,
+            Self::Mat4x4 => 4 * 4 * 4,
             Self::Int => 4,
             Self::Sampler2D => 4,
         }
@@ -47,7 +53,8 @@ impl DataType {
 
     pub fn webgl_scalar_type(self) -> u32 {
         match self {
-            Self::Float | Self::Vec2 | Self::Vec3 | Self::Mat3x3 => WebGl2RenderingContext::FLOAT,
+            Self::Float | Self::Vec2 | Self::Vec3 | Self::Vec4 |
+            Self::Mat3x3 | Self::Mat4x4 => WebGl2RenderingContext::FLOAT,
             Self::Int => WebGl2RenderingContext::INT,
             Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
         }
@@ -58,7 +65,9 @@ impl DataType {
             Self::Float => WebGl2RenderingContext::FLOAT,
             Self::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
             Self::Vec3 => WebGl2RenderingContext::FLOAT_VEC3,
+            Self::Vec4 => WebGl2RenderingContext::FLOAT_VEC4,
             Self::Mat3x3 => WebGl2RenderingContext::FLOAT_MAT3,
+            Self::Mat4x4 => WebGl2RenderingContext::FLOAT_MAT4,
             Self::Int => WebGl2RenderingContext::INT,
             Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
         }

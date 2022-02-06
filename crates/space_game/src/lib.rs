@@ -1,10 +1,9 @@
 use dom::open_websocket;
-use futures::try_join;
+use futures::Future;
 use glam::{Mat3, Vec2, Vec4};
-use log::info;
+use log::{info, error};
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::throw_val;
 use wasm_bindgen_futures::spawn_local;
 
 mod dom;
@@ -14,12 +13,15 @@ mod render;
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(async {
-        let e = try_join!(main_render(), main_net());
-        if let Err(e) = e {
-            throw_val(e);
-        }
-    });
+    spawn_local(handle_err(main_render()));
+    spawn_local(handle_err(main_net()));
+}
+
+async fn handle_err(fut: impl Future<Output=Result<(), JsValue>>) {
+    if let Err(e) = fut.await {
+        error!("Future died");
+        web_sys::console::log_1(&e);
+    }
 }
 
 pub async fn main_render() -> Result<(), JsValue> {
