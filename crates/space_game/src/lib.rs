@@ -2,7 +2,7 @@ use dom::{open_websocket, spawn, InputEventListener, Key};
 use glam::{Mat3, Vec2, Vec4};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
-use wasm_bindgen::{prelude::*};
+use wasm_bindgen::prelude::*;
 
 mod dom;
 mod render;
@@ -122,9 +122,9 @@ pub async fn main_render() -> Result<(), JsValue> {
 
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
-        let model_view = Mat3::from_translation(Vec2::new(xpos as f32, ypos as f32)) * 
-            Mat3::from_angle(time as f32) * 
-            Mat3::from_scale(Vec2::new(64.0, 64.0));
+        let model_view = Mat3::from_translation(Vec2::new(xpos as f32, ypos as f32))
+            * Mat3::from_angle(time as f32)
+            * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, projection * model_view);
         context.draw(&shader, &[Some(&texture)], &mesh);
     }

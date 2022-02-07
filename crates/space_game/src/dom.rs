@@ -1,17 +1,16 @@
 use futures::future::FusedFuture;
-use futures::{select, FutureExt, Future};
+use futures::{select, Future, FutureExt};
 use js_sys::{Function, Promise};
 use log::error;
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{
-    BinaryType, Document, EventTarget, HtmlCanvasElement, HtmlImageElement, WebSocket, Window, AddEventListenerOptions,
+    AddEventListenerOptions, BinaryType, Document, EventTarget, HtmlCanvasElement,
+    HtmlImageElement, WebSocket, Window,
 };
 
 mod input;
-pub use input::{
-    Key, InputEventListener,
-};
+pub use input::{InputEventListener, Key};
 
 pub async fn content_loaded() -> Result<(), JsValue> {
     if document()?.ready_state() == "loading" {
@@ -57,9 +56,10 @@ pub fn await_event(
 ) -> Result<impl FusedFuture<Output = JsValue>, JsValue> {
     let (cb, future) = make_callback_future();
     target.add_event_listener_with_callback_and_add_event_listener_options(
-        type_, 
-        &cb, 
-        &AddEventListenerOptions::new().once(true))?;
+        type_,
+        &cb,
+        &AddEventListenerOptions::new().once(true),
+    )?;
     Ok(future)
 }
 

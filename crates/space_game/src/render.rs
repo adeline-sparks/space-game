@@ -54,8 +54,9 @@ impl DataType {
 
     pub fn webgl_scalar_type(self) -> u32 {
         match self {
-            Self::Float | Self::Vec2 | Self::Vec3 | Self::Vec4 |
-            Self::Mat3x3 | Self::Mat4x4 => WebGl2RenderingContext::FLOAT,
+            Self::Float | Self::Vec2 | Self::Vec3 | Self::Vec4 | Self::Mat3x3 | Self::Mat4x4 => {
+                WebGl2RenderingContext::FLOAT
+            }
             Self::Int => WebGl2RenderingContext::INT,
             Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
         }

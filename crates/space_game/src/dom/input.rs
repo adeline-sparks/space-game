@@ -1,10 +1,12 @@
-use std::{rc::{Rc, Weak}, cell::RefCell, collections::HashSet};
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::{Rc, Weak};
 
 use futures::select;
-use wasm_bindgen::{JsValue, JsCast};
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{EventTarget, KeyboardEvent};
 
-use super::{await_event, spawn, get_canvas};
+use super::{await_event, get_canvas, spawn};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Key {
@@ -23,7 +25,7 @@ impl TryFrom<&KeyboardEvent> for Key {
             "ArrowRight" => Ok(Key::ArrowRight),
             "ArrowUp" => Ok(Key::ArrowUp),
             "ArrowDown" => Ok(Key::ArrowDown),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -56,7 +58,10 @@ impl InputEventListener {
     }
 }
 
-async fn listen_keyboard(target: &EventTarget, state_weak: &Weak<RefCell<State>>) -> Result<(), JsValue> {
+async fn listen_keyboard(
+    target: &EventTarget,
+    state_weak: &Weak<RefCell<State>>,
+) -> Result<(), JsValue> {
     loop {
         let ev = select! {
             ev = await_event(target, "keydown")? => ev,
@@ -69,19 +74,22 @@ async fn listen_keyboard(target: &EventTarget, state_weak: &Weak<RefCell<State>>
         };
 
         let ev = match ev.dyn_into::<KeyboardEvent>() {
-            Err(ev) => return Err(JsValue::from(format!("Failed to cast KeyboardEvent: {:?}", ev))),
+            Err(ev) => {
+                return Err(JsValue::from(format!(
+                    "Failed to cast KeyboardEvent: {ev:?}"
+                )))
+            }
             Ok(ev) => ev,
         };
 
-        let key = match Key::try_from(&ev) {
-            Err(()) => continue,
-            Ok(key) => key,
-        };
-
-        match ev.type_().as_str() {
-            "keydown" => { state_rc.borrow_mut().keys.insert(key); }
-            "keyup" => { state_rc.borrow_mut().keys.remove(&key); }
-            _ => {},
+        match (ev.type_().as_str(), Key::try_from(&ev)) {
+            ("keydown", Ok(key)) => {
+                state_rc.borrow_mut().keys.insert(key);
+            }
+            ("keyup", Ok(key)) => {
+                state_rc.borrow_mut().keys.remove(&key);
+            }
+            _ => {}
         }
     }
 }

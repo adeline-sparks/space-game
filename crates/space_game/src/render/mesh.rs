@@ -141,3 +141,24 @@ impl AttributeValue for glam::Vec2 {
         self.y.push(bytes);
     }
 }
+
+impl AttributeValue for glam::Vec3 {
+    const RENDER_TYPE: DataType = DataType::Vec3;
+
+    fn push(&self, bytes: &mut Vec<u8>) {
+        self.x.push(bytes);
+        self.y.push(bytes);
+        self.z.push(bytes);
+    }
+}
+
+impl AttributeValue for glam::Vec4 {
+    const RENDER_TYPE: DataType = DataType::Vec4;
+
+    fn push(&self, bytes: &mut Vec<u8>) {
+        self.x.push(bytes);
+        self.y.push(bytes);
+        self.z.push(bytes);
+        self.w.push(bytes);
+    }
+}
