@@ -1,10 +1,16 @@
 use futures::future::FusedFuture;
-use futures::{select, FutureExt};
+use futures::{select, FutureExt, Future};
 use js_sys::{Function, Promise};
+use log::error;
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
     BinaryType, Document, EventTarget, HtmlCanvasElement, HtmlImageElement, WebSocket, Window, AddEventListenerOptions,
+};
+
+mod input;
+pub use input::{
+    Key, InputEventListener,
 };
 
 pub async fn content_loaded() -> Result<(), JsValue> {
@@ -64,6 +70,15 @@ fn make_callback_future() -> (Function, impl FusedFuture<Output = JsValue>) {
     }));
 
     (resolve_opt.unwrap(), async { future.await.unwrap() }.fuse())
+}
+
+pub fn spawn(fut: impl Future<Output = Result<(), JsValue>> + 'static) {
+    spawn_local(async move {
+        if let Err(e) = fut.await {
+            error!("Future died");
+            web_sys::console::log_1(&e);
+        }
+    });
 }
 
 pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, JsValue> {

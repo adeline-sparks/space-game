@@ -1,11 +1,8 @@
-use dom::open_websocket;
-use futures::Future;
+use dom::{open_websocket, spawn, InputEventListener, Key};
 use glam::{Mat3, Vec2, Vec4};
-use log::{info, error};
+use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
-use wasm_bindgen::{prelude::*, JsCast};
-use wasm_bindgen_futures::spawn_local;
-use web_sys::Event;
+use wasm_bindgen::{prelude::*};
 
 mod dom;
 mod render;
@@ -14,31 +11,13 @@ mod render;
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn_local(handle_err(main_render()));
-    spawn_local(handle_err(main_net()));
-    spawn_local(handle_err(main_input()));
-}
-
-async fn handle_err(fut: impl Future<Output=Result<(), JsValue>>) {
-    if let Err(e) = fut.await {
-        error!("Future died");
-        web_sys::console::log_1(&e);
-    }
-}
-
-pub async fn main_input() -> Result<(), JsValue> {
-    let canvas = dom::get_canvas("space_game")?;
-    canvas.set_tab_index(0);
-    canvas.focus()?;
-    loop {
-        let e = dom::await_event(&canvas, "keydown")?.await;
-        web_sys::console::log_1(&e);
-        e.dyn_into::<Event>().unwrap().stop_propagation();
-    }
+    spawn(main_render());
+    spawn(main_net());
 }
 
 pub async fn main_render() -> Result<(), JsValue> {
     dom::content_loaded().await?;
+    let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
 
     let texture = Texture::load(&context, "floors.png").await?;
@@ -119,14 +98,40 @@ pub async fn main_render() -> Result<(), JsValue> {
     let projection =
         Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
 
+    let mut xpos = 0.0;
+    let mut ypos = 0.0;
+    let spd = 1000.0;
+
+    let mut prev_time = animation_frame_seconds().await?;
     loop {
-        let time = dom::animation_frame().await? / 1e3;
+        let time = animation_frame_seconds().await?;
+        let dt = time - prev_time;
+        prev_time = time;
+
+        if input.is_key_down(Key::ArrowUp) {
+            ypos += spd * dt;
+        } else if input.is_key_down(Key::ArrowDown) {
+            ypos -= spd * dt;
+        }
+
+        if input.is_key_down(Key::ArrowLeft) {
+            xpos -= spd * dt;
+        } else if input.is_key_down(Key::ArrowRight) {
+            xpos += spd * dt;
+        }
+
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
-        let model_view = Mat3::from_angle(time as f32) * Mat3::from_scale(Vec2::new(64.0, 64.0));
+        let model_view = Mat3::from_translation(Vec2::new(xpos as f32, ypos as f32)) * 
+            Mat3::from_angle(time as f32) * 
+            Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, projection * model_view);
         context.draw(&shader, &[Some(&texture)], &mesh);
     }
+}
+
+async fn animation_frame_seconds() -> Result<f64, JsValue> {
+    Ok(dom::animation_frame().await? / 1e3)
 }
 
 pub async fn main_net() -> Result<(), JsValue> {

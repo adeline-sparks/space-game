@@ -13,6 +13,7 @@ pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(unused)]
 pub enum DataType {
     Float,
     Vec2,
