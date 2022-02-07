@@ -29,6 +29,7 @@ features = [
   'HtmlCanvasElement',
   'HtmlImageElement',
   'KeyboardEvent',
+  'MouseEvent',
   'WebGlBuffer',
   'WebGlVertexArrayObject',
   'WebGl2RenderingContext',
@@ -38,5 +39,6 @@ features = [
   'WebGlTexture',
   'WebGlUniformLocation',  
   'WebSocket',
+  'WheelEvent',
   'Window',
 ]

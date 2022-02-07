@@ -1,5 +1,5 @@
 use dom::{open_websocket, spawn, InputEventListener, Key};
-use glam::{Mat3, Vec2, Vec4};
+use glam::{Mat3, Vec2, Vec4, DVec2};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
@@ -98,31 +98,44 @@ pub async fn main_render() -> Result<(), JsValue> {
     let projection =
         Mat3::from_scale(1.0f32 / Vec2::new(canvas.width() as f32, canvas.height() as f32));
 
-    let mut xpos = 0.0;
-    let mut ypos = 0.0;
+    let mut pos = DVec2::new(0.0, 0.0);
     let spd = 1000.0;
 
     let mut prev_time = animation_frame_seconds().await?;
+    let mut prev_mouse_pos = input.mouse_pos();
+    let mut prev_wheel_pos = input.wheel_pos();
     loop {
         let time = animation_frame_seconds().await?;
         let dt = time - prev_time;
         prev_time = time;
 
         if input.is_key_down(Key::ArrowUp) {
-            ypos += spd * dt;
+            pos.y += spd * dt;
         } else if input.is_key_down(Key::ArrowDown) {
-            ypos -= spd * dt;
+            pos.y -= spd * dt;
         }
 
         if input.is_key_down(Key::ArrowLeft) {
-            xpos -= spd * dt;
+            pos.x -= spd * dt;
         } else if input.is_key_down(Key::ArrowRight) {
-            xpos += spd * dt;
+            pos.x += spd * dt;
         }
+
+        let mouse_pos = input.mouse_pos();
+        let delta_mouse_pos = mouse_pos - prev_mouse_pos;
+        prev_mouse_pos = mouse_pos;
+
+        pos += delta_mouse_pos.as_dvec2();
+
+        let wheel_pos = input.wheel_pos();
+        let delta_wheel_pos = wheel_pos - prev_wheel_pos;
+        prev_wheel_pos = wheel_pos;
+
+        pos += DVec2::new(delta_wheel_pos, -delta_wheel_pos);
 
         context.clear(&Vec4::new(0.0, 0.0, 0.0, 1.0));
 
-        let model_view = Mat3::from_translation(Vec2::new(xpos as f32, ypos as f32))
+        let model_view = Mat3::from_translation(pos.as_vec2())
             * Mat3::from_angle(time as f32)
             * Mat3::from_scale(Vec2::new(64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, projection * model_view);
