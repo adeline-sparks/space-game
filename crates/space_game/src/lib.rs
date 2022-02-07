@@ -3,8 +3,9 @@ use futures::Future;
 use glam::{Mat3, Vec2, Vec4};
 use log::{info, error};
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::spawn_local;
+use web_sys::Event;
 
 mod dom;
 mod render;
@@ -15,12 +16,24 @@ pub fn start() {
     console_log::init().unwrap();
     spawn_local(handle_err(main_render()));
     spawn_local(handle_err(main_net()));
+    spawn_local(handle_err(main_input()));
 }
 
 async fn handle_err(fut: impl Future<Output=Result<(), JsValue>>) {
     if let Err(e) = fut.await {
         error!("Future died");
         web_sys::console::log_1(&e);
+    }
+}
+
+pub async fn main_input() -> Result<(), JsValue> {
+    let canvas = dom::get_canvas("space_game")?;
+    canvas.set_tab_index(0);
+    canvas.focus()?;
+    loop {
+        let e = dom::await_event(&canvas, "keydown")?.await;
+        web_sys::console::log_1(&e);
+        e.dyn_into::<Event>().unwrap().stop_propagation();
     }
 }
 
