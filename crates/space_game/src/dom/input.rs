@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::{Rc, Weak};
@@ -9,25 +10,25 @@ use web_sys::{Element, EventTarget, KeyboardEvent, MouseEvent, WheelEvent};
 
 use super::{await_event, document, get_canvas, spawn};
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Key {
-    ArrowLeft,
-    ArrowRight,
-    ArrowUp,
-    ArrowDown,
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct Key(Cow<'static, str>);
+
+pub mod key_consts {
+    use std::borrow::Cow;
+
+    use super::Key;
+
+    pub const ARROW_LEFT: Key = Key(Cow::Borrowed("ArrowLeft"));
+    pub const ARROW_RIGHT: Key = Key(Cow::Borrowed("ArrowRight"));
+    pub const ARROW_UP: Key = Key(Cow::Borrowed("ArrowUp"));
+    pub const ARROW_DOWN: Key = Key(Cow::Borrowed("ArrowDown"));
 }
 
 impl TryFrom<&KeyboardEvent> for Key {
     type Error = ();
 
     fn try_from(value: &KeyboardEvent) -> Result<Self, Self::Error> {
-        match value.key().as_str() {
-            "ArrowLeft" => Ok(Key::ArrowLeft),
-            "ArrowRight" => Ok(Key::ArrowRight),
-            "ArrowUp" => Ok(Key::ArrowUp),
-            "ArrowDown" => Ok(Key::ArrowDown),
-            _ => Err(()),
-        }
+        Ok(Key(Cow::from(value.key().clone())))
     }
 }
 
@@ -68,8 +69,8 @@ impl InputEventListener {
         InputEventListener(state_rc)
     }
 
-    pub fn is_key_down(&self, key: Key) -> bool {
-        self.0.borrow().keys.contains(&key)
+    pub fn is_key_down(&self, key: &Key) -> bool {
+        self.0.borrow().keys.contains(key)
     }
 
     pub fn mouse_pos(&self) -> IVec2 {

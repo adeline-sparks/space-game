@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
-use dom::{open_websocket, spawn, InputEventListener, Key};
-use glam::{DMat4, DVec3, Mat4, Vec2, Vec3, Vec4, DQuat};
+use dom::{key_consts, open_websocket, spawn, InputEventListener, Key};
+use glam::{DMat4, DQuat, DVec3, Mat4, Vec2, Vec3, Vec4};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
@@ -103,20 +103,21 @@ pub async fn main_render() -> Result<(), JsValue> {
         let mouse_delta = (mouse_pos - prev_mouse_pos).as_dvec2() * dt;
         prev_mouse_pos = mouse_pos;
 
-        let quat = DQuat::from_scaled_axis(DVec3::new(-mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
+        let quat =
+            DQuat::from_scaled_axis(DVec3::new(-mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
         view = DMat4::from_quat(quat) * view;
 
         let speed = PI / 4.0;
-        if input.is_key_down(Key::ArrowLeft) {
+        if input.is_key_down(&key_consts::ARROW_LEFT) {
             view = DMat4::from_rotation_z(speed * dt) * view;
-        } else if input.is_key_down(Key::ArrowRight) {
+        } else if input.is_key_down(&key_consts::ARROW_RIGHT) {
             view = DMat4::from_rotation_z(-speed * dt) * view;
         }
 
         let speed = 50.0;
-        if input.is_key_down(Key::ArrowUp) {
+        if input.is_key_down(&key_consts::ARROW_UP) {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, speed * dt)) * view;
-        } else if input.is_key_down(Key::ArrowDown) {
+        } else if input.is_key_down(&key_consts::ARROW_DOWN) {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
         }
 

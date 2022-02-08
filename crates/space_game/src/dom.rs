@@ -10,7 +10,7 @@ use web_sys::{
 };
 
 mod input;
-pub use input::{InputEventListener, Key};
+pub use input::{key_consts, InputEventListener, Key};
 
 pub async fn content_loaded() -> Result<(), JsValue> {
     if document()?.ready_state() == "loading" {
