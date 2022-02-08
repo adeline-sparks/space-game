@@ -8,6 +8,7 @@ use wasm_bindgen::prelude::*;
 
 mod dom;
 mod render;
+mod voxel;
 
 #[wasm_bindgen(start)]
 pub fn start() {
