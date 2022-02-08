@@ -1,14 +1,15 @@
 use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
-use glam::{DMat4, DQuat, DVec3, Mat4, Vec2, Vec3, Vec4};
+use glam::{DMat4, DQuat, DVec3, Mat4, Vec3, Vec4, IVec3};
 use log::info;
-use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
+use render::{Attribute, Context, DataType, MeshBuilder, Shader, Texture};
 use wasm_bindgen::prelude::*;
 
 mod dom;
 mod render;
 mod voxel;
+use voxel::{SignedDistanceFunction, marching_cubes};
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -16,6 +17,21 @@ pub fn start() {
     console_log::init().unwrap();
     spawn(main_render());
     spawn(main_net());
+}
+
+struct Sphere(f32);
+
+impl SignedDistanceFunction for Sphere {
+    fn value(&self, pos: Vec3) -> f32 {
+        pos.length() - self.0
+    }
+}
+
+struct Cube(f32);
+impl SignedDistanceFunction for Cube {
+    fn value(&self, pos: Vec3) -> f32 {
+        (Vec3::new(self.0, self.0, self.0) - pos.abs()).max_element()
+    }
 }
 
 pub async fn main_render() -> Result<(), JsValue> {
@@ -27,14 +43,36 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let attributes = &[
         Attribute {
-            name: "vert_uv".to_string(),
-            type_: DataType::Vec2,
-        },
-        Attribute {
             name: "vert_pos".to_string(),
             type_: DataType::Vec3,
         },
     ];
+
+    let mut builder = MeshBuilder::new(attributes);
+    marching_cubes(
+        &Sphere(0.5), 
+        (Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0)), 
+        IVec3::new(2, 2, 2),
+        &mut |v1, v2, v3| {
+            // builder.push(v1);
+            // let i1 = builder.end_vert();
+            // builder.push(v2);
+            // let i2 = builder.end_vert();
+            // builder.dup_vert(i2);
+            // builder.push(v3);
+            // let i3 = builder.end_vert();
+            // builder.dup_vert(i3);
+            // builder.dup_vert(i1);
+            builder.push(v1);
+            builder.end_vert();
+            builder.push(v2);
+            builder.end_vert();
+            builder.push(v3);
+            builder.end_vert();
+        },
+    );
+    let mesh = builder.build(&context)?;
+
 
     let shader = Shader::compile(
         &context,
@@ -43,51 +81,25 @@ pub async fn main_render() -> Result<(), JsValue> {
         uniform mat4x4 model_view_projection;
         
         in vec3 vert_pos;
-        in vec2 vert_uv;
-        
-        out vec2 frag_uv;
 
         void main() { 
             gl_Position = model_view_projection * vec4(vert_pos.x, vert_pos.y, vert_pos.z, 1.0);
-            frag_uv = vert_uv;
         }
         "##,
         r##"#version 300 es
     
         precision highp float;
 
-        uniform sampler2D sampler;
-        in vec2 frag_uv;
         out vec4 outColor;
         
         void main() {
-            outColor = texture(sampler, frag_uv);
+            outColor = vec4(1.0, 1.0, 1.0, 1.0);
         }
         "##,
     )?;
 
     let model_view_projection_loc =
         shader.uniform_location::<glam::Mat4>("model_view_projection")?;
-    let sampler_loc = shader.uniform_location::<Sampler2D>("sampler")?;
-    shader.set_uniform(&sampler_loc, Sampler2D(0));
-
-    let mut builder = MeshBuilder::new(attributes);
-    builder.push(Vec2::new(0.0, 1.0));
-    builder.push(Vec3::new(-0.5, 0.5, 0.0));
-    builder.end_vert();
-    builder.push(Vec2::new(0.0, 0.0));
-    builder.push(Vec3::new(-0.5, -0.5, 0.0));
-    let v1 = builder.end_vert();
-    builder.push(Vec2::new(1.0, 1.0));
-    builder.push(Vec3::new(0.5, 0.5, 0.0));
-    let v2 = builder.end_vert();
-    builder.dup_vert(v1);
-    builder.dup_vert(v2);
-    builder.push(Vec2::new(1.0, 0.0));
-    builder.push(Vec3::new(0.5, -0.5, 0.0));
-    builder.end_vert();
-    let mesh = builder.build(&context)?;
-
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
     let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
@@ -123,7 +135,7 @@ pub async fn main_render() -> Result<(), JsValue> {
         }
 
         context.clear(Vec4::new(0.0, 0.0, 0.0, 1.0));
-        let model = Mat4::from_scale(Vec3::new(64.0, 64.0, 64.0));
+        let model = Mat4::IDENTITY;
         shader.set_uniform(
             &model_view_projection_loc,
             projection * view.as_mat4() * model,

@@ -1,4 +1,5 @@
 use glam::{Vec3, IVec3};
+use log::info;
 
 pub trait SignedDistanceFunction {
     fn value(&self, pos: Vec3) -> f32;
@@ -6,36 +7,52 @@ pub trait SignedDistanceFunction {
 
 pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, Vec3), sample_count: IVec3, output_tri: &mut impl FnMut(Vec3, Vec3, Vec3)) {
     let cell_size = (sample_volume.1 - sample_volume.0) / sample_count.as_vec3();
+    info!("cell_size: {cell_size}");
     let ipos_to_pos = |ipos: IVec3| -> Vec3 {
         sample_volume.0 + ipos.as_vec3() * cell_size
     };
 
-    for ((x, y), z) in (0..sample_count.x).zip(0..sample_count.y).zip(0..sample_count.z) {
-        let ipos = IVec3::new(x, y, z);
-        let mut case = 0;
-        for corner in 0..NUM_CORNERS {
-            let pos = ipos_to_pos(ipos + corner_offset(corner));
-            if sdf.value(pos) > 0.0 {
-                case |= 1 << corner;
+    for x in 0..sample_count.x {
+        for y in 0..sample_count.y {
+            for z in 0..sample_count.z {
+                let ipos = IVec3::new(x, y, z);
+                let mut case = 0;
+                for corner in 0..NUM_CORNERS {
+                    let corner_pos = ipos_to_pos(ipos + corner_offset(corner));
+                    if sdf.value(corner_pos) > 0.0 {
+                        case |= 1 << corner;
+                    }
+                }
+        
+                let class = CASE_TO_CLASS[case] as usize;
+                if class == 0 {
+                    continue;
+                }
+
+                info!("ipos {ipos} case {case:#02X}");
+        
+                let vert_poses: Vec<_> = CASE_TO_VERT_CUBE_CORNERS[case].iter().map(|&[corner1, corner2]| {
+                    let (corner1, corner2) = (corner1 as usize, corner2 as usize);
+        
+                    let pos1 = ipos_to_pos(ipos + corner_offset(corner1));
+                    let pos2 = ipos_to_pos(ipos + corner_offset(corner2));
+                    let val1 = sdf.value(pos1);
+                    let val2 = sdf.value(pos2);
+                    assert!((val1 > 0.0) ^ (val2 > 0.0));
+        
+                    let scale = (val1 / (val1 - val2)).clamp(0.0, 1.0);
+                    let pos = pos1.lerp(pos2, scale);
+                    let val = sdf.value(pos);
+                    info!("edge {pos1} ({val1}) -> {pos2} ({val2}) generated {pos} ({val})");
+
+                    pos
+                }).collect();
+        
+                for &[v1, v2, v3] in CLASS_TO_TRIS[class] {
+                    let (v1, v2, v3) = (v1 as usize, v2 as usize, v3 as usize);
+                    output_tri(vert_poses[v1], vert_poses[v2], vert_poses[v3]);
+                }
             }
-        }
-        let class = CASE_TO_CLASS[case] as usize;
-
-        let vert_poses: Vec<_> = CASE_TO_VERT_CUBE_CORNERS[case].iter().map(|&[corner1, corner2]| {
-            let (corner1, corner2) = (corner1 as usize, corner2 as usize);
-
-            let pos1 = ipos_to_pos(ipos + corner_offset(corner1));
-            let pos2 = ipos_to_pos(ipos + corner_offset(corner2));
-            let val1 = sdf.value(pos1);
-            let val2 = sdf.value(pos2);
-
-            let scale = val1 / (val1 - val2);
-            pos1.lerp(pos2, scale)
-        }).collect();
-
-        for &[v1, v2, v3] in CLASS_TO_TRIS[class] {
-            let (v1, v2, v3) = (v1 as usize, v2 as usize, v3 as usize);
-            output_tri(vert_poses[v1], vert_poses[v2], vert_poses[v3]);
         }
     }
 }
