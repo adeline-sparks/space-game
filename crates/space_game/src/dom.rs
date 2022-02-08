@@ -1,9 +1,9 @@
 use futures::future::FusedFuture;
 use futures::{select, Future, FutureExt};
 use js_sys::{Function, Promise};
-use log::error;
+
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{
     AddEventListenerOptions, BinaryType, Document, EventTarget, HtmlCanvasElement,
     HtmlImageElement, WebSocket, Window,
@@ -73,11 +73,10 @@ fn make_callback_future() -> (Function, impl FusedFuture<Output = JsValue>) {
 }
 
 pub fn spawn(fut: impl Future<Output = Result<(), JsValue>> + 'static) {
-    spawn_local(async move {
-        if let Err(e) = fut.await {
-            error!("Future died");
-            web_sys::console::log_1(&e);
-        }
+    let _ = future_to_promise(async move {
+        // TODO log on failure
+        fut.await?;
+        Ok(JsValue::NULL)
     });
 }
 

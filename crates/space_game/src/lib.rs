@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
 
-use dom::{key_consts, open_websocket, spawn, InputEventListener, Key};
+use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, Mat4, Vec2, Vec3, Vec4};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
