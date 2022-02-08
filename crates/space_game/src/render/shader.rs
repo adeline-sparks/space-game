@@ -158,11 +158,27 @@ impl UniformValue for glam::Vec3 {
     }
 }
 
+impl UniformValue for glam::Vec4 {
+    const RENDER_TYPE: DataType = DataType::Vec4;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform4f(Some(&loc), self.x, self.y, self.z, self.w);
+    }
+}
+
 impl UniformValue for glam::Mat3 {
     const RENDER_TYPE: DataType = DataType::Mat3x3;
 
     fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         context.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
+    }
+}
+
+impl UniformValue for glam::Mat4 {
+    const RENDER_TYPE: DataType = DataType::Mat4x4;
+
+    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        context.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_ref());
     }
 }
 
