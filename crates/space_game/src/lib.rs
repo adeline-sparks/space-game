@@ -117,6 +117,7 @@ pub async fn main_render() -> Result<(), JsValue> {
             view = DMat4::from_rotation_y(turn_speed * dt) * view;
         }
 
+        context.clear(Vec4::new(0.0, 0.0, 0.0, 1.0));
         let model = Mat4::from_scale(Vec3::new(64.0, 64.0, 64.0));
         shader.set_uniform(&model_view_projection_loc, projection * view.as_mat4() * model);
         context.draw(&shader, &[Some(&texture)], &mesh);

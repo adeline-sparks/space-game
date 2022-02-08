@@ -94,7 +94,7 @@ impl Context {
         &self.canvas
     }
 
-    pub fn clear(&self, clear_color: &glam::Vec4) {
+    pub fn clear(&self, clear_color: glam::Vec4) {
         self.gl
             .clear_color(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         self.gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
