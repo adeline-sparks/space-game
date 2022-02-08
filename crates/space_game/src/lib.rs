@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use dom::{open_websocket, spawn, InputEventListener, Key};
-use glam::{Mat3, Vec2, Vec4, DVec2, Vec3, Mat4, DVec3, DMat4};
+use glam::{DMat4, DVec3, Mat4, Vec2, Vec3, Vec4, DQuat};
 use log::info;
 use render::{Attribute, Context, DataType, MeshBuilder, Sampler2D, Shader, Texture};
 use wasm_bindgen::prelude::*;
@@ -89,19 +89,29 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
-    let projection = Mat4::perspective_rh_gl(
-        (75.0f32).to_radians(),
-        aspect_ratio,
-        1.0,
-        1000.0,
-    );
+    let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
 
     let mut view = DMat4::look_at_rh(DVec3::new(0.0, 0.0, 10.0), DVec3::ZERO, DVec3::Y);
     let mut prev_time = animation_frame_seconds().await?;
+    let mut prev_mouse_pos = input.mouse_pos();
     loop {
         let time = animation_frame_seconds().await?;
         let dt = time - prev_time;
         prev_time = time;
+
+        let mouse_pos = input.mouse_pos();
+        let mouse_delta = (mouse_pos - prev_mouse_pos).as_dvec2() * dt;
+        prev_mouse_pos = mouse_pos;
+
+        let quat = DQuat::from_scaled_axis(DVec3::new(-mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
+        view = DMat4::from_quat(quat) * view;
+
+        let speed = PI / 4.0;
+        if input.is_key_down(Key::ArrowLeft) {
+            view = DMat4::from_rotation_z(speed * dt) * view;
+        } else if input.is_key_down(Key::ArrowRight) {
+            view = DMat4::from_rotation_z(-speed * dt) * view;
+        }
 
         let speed = 50.0;
         if input.is_key_down(Key::ArrowUp) {
@@ -110,16 +120,12 @@ pub async fn main_render() -> Result<(), JsValue> {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
         }
 
-        let turn_speed = PI;
-        if input.is_key_down(Key::ArrowLeft) {
-            view = DMat4::from_rotation_y(-turn_speed * dt) * view;
-        } else if input.is_key_down(Key::ArrowRight) {
-            view = DMat4::from_rotation_y(turn_speed * dt) * view;
-        }
-
         context.clear(Vec4::new(0.0, 0.0, 0.0, 1.0));
         let model = Mat4::from_scale(Vec3::new(64.0, 64.0, 64.0));
-        shader.set_uniform(&model_view_projection_loc, projection * view.as_mat4() * model);
+        shader.set_uniform(
+            &model_view_projection_loc,
+            projection * view.as_mat4() * model,
+        );
         context.draw(&shader, &[Some(&texture)], &mesh);
     }
 }

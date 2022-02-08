@@ -3,11 +3,11 @@ use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 
 use futures::select;
-use glam::{IVec2};
+use glam::IVec2;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{EventTarget, KeyboardEvent, Element, MouseEvent, WheelEvent};
+use web_sys::{Element, EventTarget, KeyboardEvent, MouseEvent, WheelEvent};
 
-use super::{await_event, get_canvas, spawn, document};
+use super::{await_event, document, get_canvas, spawn};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Key {
@@ -72,7 +72,7 @@ impl InputEventListener {
         self.0.borrow().keys.contains(&key)
     }
 
-    pub fn mouse_pos(&self) -> IVec2 { 
+    pub fn mouse_pos(&self) -> IVec2 {
         self.0.borrow().mouse_pos
     }
 
@@ -104,7 +104,7 @@ async fn listen_keyboard(
             }
             Ok(ev) => ev,
         };
-        
+
         ev.prevent_default();
 
         match (ev.type_().as_str(), Key::try_from(&ev)) {
@@ -119,12 +119,9 @@ async fn listen_keyboard(
     }
 }
 
-async fn listen_mouse(
-    target: &Element,
-    state_weak: &Weak<RefCell<State>>,
-) -> Result<(), JsValue> {
+async fn listen_mouse(target: &Element, state_weak: &Weak<RefCell<State>>) -> Result<(), JsValue> {
     let evt = target.dyn_ref::<EventTarget>().unwrap();
-    
+
     loop {
         let ev = select! {
             ev = await_event(evt, "mousemove")? => ev,
@@ -141,7 +138,7 @@ async fn listen_mouse(
             None => return Ok(()),
             Some(state_rc) => state_rc,
         };
-        
+
         if let Some(ev) = ev.dyn_ref::<MouseEvent>() {
             ev.prevent_default();
 
