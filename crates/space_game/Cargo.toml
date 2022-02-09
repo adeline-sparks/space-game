@@ -9,15 +9,18 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+space_game_core = { path = "../space_game_core" }
+
+glam = "0.20"
+futures = "0.3"
+once_cell = "1"
+
 console_error_panic_hook = "0.1"
 log = "0.4"
 console_log = "0.2"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-glam = "0.20"
-futures = "0.3"
-space_game_core = { path = "../space_game_core" }
 
 [dependencies.web-sys]
 version = "0.3"

@@ -1,5 +1,6 @@
 use glam::{Vec3, IVec3};
 use log::info;
+use once_cell::sync::Lazy;
 
 mod table;
 
@@ -26,34 +27,30 @@ pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, V
                     }
                 }
         
-                if case == 0 || case == 0xff { continue; }
+                let case = &ALL_CASES[case as usize];
+                let verts = case.edges.iter().map(|&(d1, d2)| {
+                    let pos1 = ipos_to_pos(ipos + d1);
+                    let pos2 = ipos_to_pos(ipos + d2);
 
-                for &tri in table::CASE_TRIS[case as usize] {
-                    let mut verts = [Vec3::ZERO; 3];
-                    for i in 0..3 {
-                        let [corner1, corner2] = EDGE_CORNERS[tri[i] as usize];
+                    let val1 = sdf.value(pos1);
+                    let val2 = sdf.value(pos2);
+                    assert!((val1 > 0.0) ^ (val2 > 0.0));
+                    let scale = (val1 / (val1 - val2)).clamp(0.0, 1.0);
+                    
+                    pos1.lerp(pos2, scale)
+                }).collect::<Vec<_>>();
+                let normals = verts.iter().map(|&p| {
+                    sdf.grad(p).normalize_or_zero()
+                }).collect::<Vec<_>>();
 
-                        let pos1 = ipos_to_pos(ipos + corner_offset(corner1));
-                        let pos2 = ipos_to_pos(ipos + corner_offset(corner2));
-                        let val1 = sdf.value(pos1);
-                        let val2 = sdf.value(pos2);
-                        assert!((val1 > 0.0) ^ (val2 > 0.0));
-            
-                        let scale = (val1 / (val1 - val2)).clamp(0.0, 1.0);
-                        let pos = pos1.lerp(pos2, scale);
-                        let val = sdf.value(pos);
-                        info!("edge {pos1} ({val1}) -> {pos2} ({val2}) generated {pos} ({val})");
-
-                        verts[i] = pos;
-                    }
-
+                for &[i1, i2, i3] in case.tris.iter() {
                     output_tri(
-                        verts[0], 
-                        verts[1], 
-                        verts[2], 
-                        sdf.grad(verts[0]).normalize(), 
-                        sdf.grad(verts[1]).normalize(), 
-                        sdf.grad(verts[2]).normalize(),
+                        verts[i1], 
+                        verts[i2], 
+                        verts[i3], 
+                        normals[i1],
+                        normals[i2],
+                        normals[i3],
                     );
                 }
             }
@@ -93,3 +90,45 @@ static EDGE_CORNERS: [[u8; 2]; NUM_EDGES as usize] = [
     [2, 6],
     [3, 7],
 ];
+
+static ALL_CASES: Lazy<Box<[Case]>> = Lazy::new(|| 
+    (0..256)
+        .into_iter()
+        .map(|i| Case::from_raw_tris(table::CASE_TRIS[i]))
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+);
+
+#[derive(Default)]
+struct Case {
+    edges: Box<[(IVec3, IVec3)]>,
+    tris: Box<[[usize; 3]]>,
+}
+
+impl Case {
+    fn from_raw_tris(raw_tris: &[[u8; 3]]) -> Self {
+        let mut edges = Vec::new();
+        let mut tris = Vec::new();
+        let mut edge_map = [None; NUM_EDGES as usize];
+
+        for &raw_tri in raw_tris {
+            let mut tri = [0; 3];
+
+            for i in 0..3 {
+                tri[i] = *edge_map[raw_tri[i] as usize].get_or_insert_with(|| {
+                    let pos = edges.len();
+                    let [c1, c2] = EDGE_CORNERS[raw_tri[i] as usize];
+                    edges.push((corner_offset(c1), corner_offset(c2)));
+                    pos
+                });
+            }
+
+            tris.push(tri);
+        }
+
+        Self {
+             edges: edges.into_boxed_slice(), 
+             tris: tris.into_boxed_slice(),
+        }
+    }
+}
