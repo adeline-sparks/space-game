@@ -50,19 +50,10 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let mut builder = MeshBuilder::new(attributes);
     marching_cubes(
-        &Sphere(0.5), 
-        (Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0)), 
-        IVec3::new(2, 2, 2),
+        &Sphere(32.0), 
+        (Vec3::new(-100.0, -100.0, -100.0), Vec3::new(100.0, 100.0, 100.0)), 
+        IVec3::new(16, 16, 16),
         &mut |v1, v2, v3| {
-            // builder.push(v1);
-            // let i1 = builder.end_vert();
-            // builder.push(v2);
-            // let i2 = builder.end_vert();
-            // builder.dup_vert(i2);
-            // builder.push(v3);
-            // let i3 = builder.end_vert();
-            // builder.dup_vert(i3);
-            // builder.dup_vert(i1);
             builder.push(v1);
             builder.end_vert();
             builder.push(v2);
