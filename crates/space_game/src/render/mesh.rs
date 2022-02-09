@@ -75,7 +75,8 @@ impl<'a> MeshBuilder<'a> {
                 self.indices.extend_from_slice(&[id1, id2, id3]);
             }
             MeshBuilderMode::WIREFRAME => {
-                self.indices.extend_from_slice(&[id1, id2, id2, id3, id3, id1]);
+                self.indices
+                    .extend_from_slice(&[id1, id2, id2, id3, id3, id1]);
             }
         }
     }

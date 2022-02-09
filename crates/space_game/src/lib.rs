@@ -1,15 +1,16 @@
+#![allow(dead_code)]
 use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
-use glam::{DMat4, DQuat, DVec3, Mat4, Vec3, Vec4, IVec3};
+use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
-use render::{Attribute, Context, DataType, MeshBuilder, Shader, Texture, MeshBuilderMode};
+use render::{Attribute, Context, DataType, MeshBuilder, MeshBuilderMode, Shader, Texture};
 use wasm_bindgen::prelude::*;
 
 mod dom;
 mod render;
 mod voxel;
-use voxel::{SignedDistanceFunction, marching_cubes};
+use voxel::{marching_cubes, SignedDistanceFunction};
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -31,7 +32,7 @@ impl SignedDistanceFunction for Sphere {
     }
 }
 
-pub async fn main_render() -> Result<(), JsValue> {
+async fn main_render() -> Result<(), JsValue> {
     dom::content_loaded().await?;
     let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
@@ -51,8 +52,11 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let mut builder = MeshBuilder::new(attributes, MeshBuilderMode::SOLID);
     marching_cubes(
-        &Sphere(32.0), 
-        (Vec3::new(-128.0, -128.0, -128.0), Vec3::new(128.0, 128.0, 128.0)), 
+        &Sphere(32.0),
+        (
+            Vec3::new(-128.0, -128.0, -128.0),
+            Vec3::new(128.0, 128.0, 128.0),
+        ),
         IVec3::new(32, 32, 32),
         &mut |v1, v2, v3, n1, n2, n3| {
             builder.write_attribute(v1);
@@ -68,7 +72,6 @@ pub async fn main_render() -> Result<(), JsValue> {
         },
     );
     let mesh = builder.build(&context)?;
-
 
     let shader = Shader::compile(
         &context,
@@ -102,8 +105,7 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let model_view_projection_loc =
         shader.uniform_location::<glam::Mat4>("model_view_projection")?;
-    let normal_matrix_loc = 
-        shader.uniform_location::<glam::Mat4>("normal_matrix")?;
+    let normal_matrix_loc = shader.uniform_location::<glam::Mat4>("normal_matrix")?;
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
     let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
@@ -152,7 +154,7 @@ async fn animation_frame_seconds() -> Result<f64, JsValue> {
     Ok(dom::animation_frame().await? / 1e3)
 }
 
-pub async fn main_net() -> Result<(), JsValue> {
+async fn main_net() -> Result<(), JsValue> {
     info!("Creating websocket");
     let ws = open_websocket("ws://localhost:8000/ws/v1").await?;
     info!("Websocket connected");
