@@ -123,6 +123,12 @@ fn compile_shader(
     Ok(shader)
 }
 
+impl Drop for Shader {
+    fn drop(&mut self) {
+        self.gl.delete_program(Some(&self.program));
+    }
+}
+
 pub struct Uniform<T: UniformValue> {
     location: WebGlUniformLocation,
     phantom: PhantomData<T>,

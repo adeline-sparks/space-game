@@ -1,11 +1,14 @@
 use js_sys::{Uint16Array, Uint8Array};
 use wasm_bindgen::JsValue;
-use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject};
+use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject, WebGlBuffer};
 
 use super::{Context, DataType};
 
 pub struct Mesh {
+    gl: WebGl2RenderingContext,
     vao: WebGlVertexArrayObject,
+    vert_buffer: WebGlBuffer,
+    index_buffer: WebGlBuffer,
     mode: u32,
     vert_count: i32,
 }
@@ -134,10 +137,20 @@ impl<'a> MeshBuilder<'a> {
         };
 
         Ok(Mesh {
+            gl: gl.clone(),
             vao,
+            vert_buffer,
+            index_buffer,
             mode,
             vert_count: self.indices.len() as i32,
         })
+    }
+}
+
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        self.gl.delete_buffer(Some(&self.vert_buffer));
+        self.gl.delete_buffer(Some(&self.index_buffer));
     }
 }
 
@@ -151,7 +164,7 @@ impl AttributeValue for f32 {
     const RENDER_TYPE: DataType = DataType::Float;
 
     fn push(&self, bytes: &mut Vec<u8>) {
-        bytes.extend(self.to_ne_bytes().iter());
+        bytes.extend_from_slice(&self.to_ne_bytes());
     }
 }
 

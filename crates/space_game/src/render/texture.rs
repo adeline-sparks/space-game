@@ -4,7 +4,10 @@ use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
-pub struct Texture(WebGlTexture);
+pub struct Texture { 
+    gl: WebGl2RenderingContext,
+    texture: WebGlTexture,
+}
 
 impl Texture {
     pub async fn load(context: &Context, src: &str) -> Result<Texture, JsValue> {
@@ -33,15 +36,21 @@ impl Texture {
             WebGl2RenderingContext::NEAREST as i32,
         );
 
-        Ok(Texture(texture))
+        Ok(Texture { gl: gl.clone(), texture })
     }
 
     pub fn bind(textures: &[Option<&Self>], gl: &WebGl2RenderingContext) {
         for (i, texture) in textures.iter().enumerate() {
             if let Some(texture) = texture {
                 gl.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-                gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.0));
+                gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.texture));
             }
         }
+    }
+}
+
+impl Drop for Texture {
+    fn drop(&mut self) {
+        self.gl.delete_texture(Some(&self.texture));
     }
 }
