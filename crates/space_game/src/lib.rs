@@ -23,14 +23,11 @@ struct Sphere(f32);
 
 impl SignedDistanceFunction for Sphere {
     fn value(&self, pos: Vec3) -> f32 {
-        pos.length() - self.0
+        self.0 - pos.length()
     }
-}
 
-struct Cube(f32);
-impl SignedDistanceFunction for Cube {
-    fn value(&self, pos: Vec3) -> f32 {
-        (Vec3::new(self.0, self.0, self.0) - pos.abs()).max_element()
+    fn grad(&self, pos: Vec3) -> Vec3 {
+        -2.0 * pos
     }
 }
 
@@ -46,6 +43,10 @@ pub async fn main_render() -> Result<(), JsValue> {
             name: "vert_pos".to_string(),
             type_: DataType::Vec3,
         },
+        Attribute {
+            name: "vert_normal".to_string(),
+            type_: DataType::Vec3,
+        },
     ];
 
     let mut builder = MeshBuilder::new(attributes);
@@ -53,12 +54,15 @@ pub async fn main_render() -> Result<(), JsValue> {
         &Sphere(32.0), 
         (Vec3::new(-100.0, -100.0, -100.0), Vec3::new(100.0, 100.0, 100.0)), 
         IVec3::new(16, 16, 16),
-        &mut |v1, v2, v3| {
+        &mut |v1, v2, v3, n1, n2, n3| {
             builder.push(v1);
+            builder.push(n1);
             builder.end_vert();
             builder.push(v2);
+            builder.push(n2);
             builder.end_vert();
             builder.push(v3);
+            builder.push(n3);
             builder.end_vert();
         },
     );
@@ -72,19 +76,24 @@ pub async fn main_render() -> Result<(), JsValue> {
         uniform mat4x4 model_view_projection;
         
         in vec3 vert_pos;
+        in vec3 vert_normal;
+        out vec3 frag_normal;
 
         void main() { 
             gl_Position = model_view_projection * vec4(vert_pos.x, vert_pos.y, vert_pos.z, 1.0);
+            frag_normal = vert_normal;
         }
         "##,
         r##"#version 300 es
     
         precision highp float;
 
+        in vec3 frag_normal;
         out vec4 outColor;
         
         void main() {
-            outColor = vec4(1.0, 1.0, 1.0, 1.0);
+            outColor.rgb = frag_normal / 2.0 + vec3(0.5, 0.5, 0.5);
+            outColor.a = 1.0;
         }
         "##,
     )?;

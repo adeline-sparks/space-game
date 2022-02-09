@@ -107,6 +107,8 @@ impl Context {
             self.canvas.width() as i32,
             self.canvas.height() as i32,
         );
+        self.gl.enable(WebGl2RenderingContext::CULL_FACE);
+        self.gl.front_face(WebGl2RenderingContext::CW);
         shader.use_(&self.gl);
         Texture::bind(textures, &self.gl);
         mesh.draw(&self.gl);

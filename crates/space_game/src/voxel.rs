@@ -3,9 +3,17 @@ use log::info;
 
 pub trait SignedDistanceFunction {
     fn value(&self, pos: Vec3) -> f32;
+    fn grad(&self, pos: Vec3) -> Vec3 {
+        let delta = 0.001;
+        Vec3::new(
+            self.value(Vec3::new(pos.x + delta, pos.y, pos.z)) - self.value(Vec3::new(pos.x - delta, pos.y, pos.z)),
+            self.value(Vec3::new(pos.x, pos.y + delta, pos.z)) - self.value(Vec3::new(pos.x, pos.y - delta, pos.z)),
+            self.value(Vec3::new(pos.x, pos.y, pos.z + delta)) - self.value(Vec3::new(pos.x, pos.y, pos.z - delta)),
+        )/delta
+    }
 }
 
-pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, Vec3), sample_count: IVec3, output_tri: &mut impl FnMut(Vec3, Vec3, Vec3)) {
+pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, Vec3), sample_count: IVec3, output_tri: &mut impl FnMut(Vec3, Vec3, Vec3, Vec3, Vec3, Vec3)) {
     let cell_size = (sample_volume.1 - sample_volume.0) / sample_count.as_vec3();
     info!("cell_size: {cell_size}");
     let ipos_to_pos = |ipos: IVec3| -> Vec3 {
@@ -24,6 +32,7 @@ pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, V
                     }
                 }
         
+                if case == 0 || case == 0xff { continue; }
                 info!("ipos {ipos} case {case:#02X}");
 
                 for &edges in CASE_EDGES[case as usize] {
@@ -45,7 +54,14 @@ pub fn marching_cubes(sdf: &impl SignedDistanceFunction, sample_volume: (Vec3, V
                         verts[i] = pos;
                     }
 
-                    output_tri(verts[0], verts[1], verts[2]);
+                    output_tri(
+                        verts[0], 
+                        verts[1], 
+                        verts[2], 
+                        sdf.grad(verts[0]).normalize(), 
+                        sdf.grad(verts[1]).normalize(), 
+                        sdf.grad(verts[2]).normalize(),
+                    );
                 }
             }
         }
