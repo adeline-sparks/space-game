@@ -8,7 +8,7 @@ mod mesh;
 mod shader;
 mod texture;
 
-pub use mesh::{Attribute, Mesh, MeshBuilder};
+pub use mesh::{Attribute, Mesh, MeshBuilder, MeshBuilderMode};
 pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
 

@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, Mat4, Vec3, Vec4, IVec3};
 use log::info;
-use render::{Attribute, Context, DataType, MeshBuilder, Shader, Texture};
+use render::{Attribute, Context, DataType, MeshBuilder, Shader, Texture, MeshBuilderMode};
 use wasm_bindgen::prelude::*;
 
 mod dom;
@@ -49,21 +49,22 @@ pub async fn main_render() -> Result<(), JsValue> {
         },
     ];
 
-    let mut builder = MeshBuilder::new(attributes);
+    let mut builder = MeshBuilder::new(attributes, MeshBuilderMode::SOLID);
     marching_cubes(
         &Sphere(32.0), 
-        (Vec3::new(-100.0, -100.0, -100.0), Vec3::new(100.0, 100.0, 100.0)), 
-        IVec3::new(16, 16, 16),
+        (Vec3::new(-128.0, -128.0, -128.0), Vec3::new(128.0, 128.0, 128.0)), 
+        IVec3::new(32, 32, 32),
         &mut |v1, v2, v3, n1, n2, n3| {
-            builder.push(v1);
-            builder.push(n1);
-            builder.end_vert();
-            builder.push(v2);
-            builder.push(n2);
-            builder.end_vert();
-            builder.push(v3);
-            builder.push(n3);
-            builder.end_vert();
+            builder.write_attribute(v1);
+            builder.write_attribute(n1);
+            let i1 = builder.finish_vert();
+            builder.write_attribute(v2);
+            builder.write_attribute(n2);
+            let i2 = builder.finish_vert();
+            builder.write_attribute(v3);
+            builder.write_attribute(n3);
+            let i3 = builder.finish_vert();
+            builder.write_triangle(i1, i2, i3);
         },
     );
     let mesh = builder.build(&context)?;
@@ -74,6 +75,7 @@ pub async fn main_render() -> Result<(), JsValue> {
         attributes,
         r##"#version 300 es
         uniform mat4x4 model_view_projection;
+        uniform mat4x4 normal_matrix;
         
         in vec3 vert_pos;
         in vec3 vert_normal;
@@ -81,7 +83,7 @@ pub async fn main_render() -> Result<(), JsValue> {
 
         void main() { 
             gl_Position = model_view_projection * vec4(vert_pos.x, vert_pos.y, vert_pos.z, 1.0);
-            frag_normal = vert_normal;
+            frag_normal = (normal_matrix * vec4(vert_normal.x, vert_normal.y, vert_normal.z, 0.0)).xyz;
         }
         "##,
         r##"#version 300 es
@@ -100,11 +102,13 @@ pub async fn main_render() -> Result<(), JsValue> {
 
     let model_view_projection_loc =
         shader.uniform_location::<glam::Mat4>("model_view_projection")?;
+    let normal_matrix_loc = 
+        shader.uniform_location::<glam::Mat4>("normal_matrix")?;
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
     let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
 
-    let mut view = DMat4::look_at_rh(DVec3::new(0.0, 0.0, 10.0), DVec3::ZERO, DVec3::Y);
+    let mut view = DMat4::look_at_rh(DVec3::new(0.0, 0.0, 100.0), DVec3::ZERO, DVec3::Y);
     let mut prev_time = animation_frame_seconds().await?;
     let mut prev_mouse_pos = input.mouse_pos();
     loop {
@@ -136,10 +140,10 @@ pub async fn main_render() -> Result<(), JsValue> {
 
         context.clear(Vec4::new(0.0, 0.0, 0.0, 1.0));
         let model = Mat4::IDENTITY;
-        shader.set_uniform(
-            &model_view_projection_loc,
-            projection * view.as_mat4() * model,
-        );
+        let model_view = view.as_mat4() * model;
+        let model_view_projection = projection * model_view;
+        shader.set_uniform(&model_view_projection_loc, model_view_projection);
+        shader.set_uniform(&normal_matrix_loc, model_view.inverse().transpose());
         context.draw(&shader, &[Some(&texture)], &mesh);
     }
 }
