@@ -2,15 +2,15 @@
 use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
+use gl::{Context, Shader, Texture, Vao};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
-use gl::{Context, Shader, Texture, Vao};
 use wasm_bindgen::prelude::*;
 
 pub mod dom;
-pub mod mesh;
 pub mod gl;
+pub mod mesh;
 pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
 
@@ -41,7 +41,7 @@ async fn main_render() -> Result<(), JsValue> {
     let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
 
-    let texture = Texture::load(&context, "floors.png").await?;
+    let texture = Texture::load(&context, "ground_0010_base_color_2k.jpg").await?;
 
     let attributes = &[
         Attribute {
@@ -70,34 +70,65 @@ async fn main_render() -> Result<(), JsValue> {
         attributes,
         r##"#version 300 es
         uniform mat4x4 model_view_projection;
+        uniform mat4x4 model_matrix;
         uniform mat4x4 normal_matrix;
         
         in vec3 vert_pos;
         in vec3 vert_normal;
-        out vec3 frag_normal;
+        out vec3 frag_world_pos;
+        out vec3 frag_world_normal;
 
         void main() { 
-            gl_Position = model_view_projection * vec4(vert_pos.x, vert_pos.y, vert_pos.z, 1.0);
-            frag_normal = (normal_matrix * vec4(vert_normal.x, vert_normal.y, vert_normal.z, 0.0)).xyz;
+            vec4 pos;
+            pos.xyz = vert_pos;
+            pos.w = 1.0;
+
+            gl_Position = model_view_projection * pos;
+            frag_world_pos = (model_matrix * pos).xyz;
+
+            vec4 normal;
+            normal.xyz = vert_normal;
+            normal.w = 0.0;
+            frag_world_normal = (normal_matrix * normal).xyz;
         }
         "##,
         r##"#version 300 es
     
         precision highp float;
 
-        in vec3 frag_normal;
-        out vec4 outColor;
+        uniform sampler2D tex_color;
+        uniform float tex_scale;
+        uniform float tex_blend_sharpness;
+
+        in vec3 frag_world_pos;
+        in vec3 frag_world_normal;
+        out vec4 out_color;
         
         void main() {
-            outColor.rgb = frag_normal / 2.0 + vec3(0.5, 0.5, 0.5);
-            outColor.a = 1.0;
+            vec3 scaled_world_pos = frag_world_pos * tex_scale;
+            mat3 sample_colors = mat3(
+                texture(tex_color, scaled_world_pos.yz).rgb,
+                texture(tex_color, scaled_world_pos.xz).rgb,
+                texture(tex_color, scaled_world_pos.xy).rgb
+            );
+            vec3 sample_weights = pow(abs(frag_world_normal), vec3(tex_blend_sharpness));
+            sample_weights /= (sample_weights.x + sample_weights.y + sample_weights.z);
+            out_color.rgb = sample_colors * sample_weights;
+            out_color.a = 1.0;
         }
         "##,
     )?;
 
     let model_view_projection_loc =
         shader.uniform_location::<glam::Mat4>("model_view_projection")?;
+    let model_matrix_loc = shader.uniform_location::<glam::Mat4>("model_matrix")?;
     let normal_matrix_loc = shader.uniform_location::<glam::Mat4>("normal_matrix")?;
+    let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
+    let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
+
+    shader.set_uniform(&tex_scale_loc, 0.1);
+    shader.set_uniform(&tex_blend_sharpness_loc, 2.0);
+
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
     let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
@@ -137,7 +168,8 @@ async fn main_render() -> Result<(), JsValue> {
         let model_view = view.as_mat4() * model;
         let model_view_projection = projection * model_view;
         shader.set_uniform(&model_view_projection_loc, model_view_projection);
-        shader.set_uniform(&normal_matrix_loc, model_view.inverse().transpose());
+        shader.set_uniform(&model_matrix_loc, model);
+        shader.set_uniform(&normal_matrix_loc, model.inverse().transpose());
         context.draw(&shader, &[Some(&texture)], &vao);
     }
 }

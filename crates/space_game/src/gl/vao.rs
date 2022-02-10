@@ -3,8 +3,8 @@ use js_sys::{Uint16Array, Uint8Array};
 use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlBuffer, WebGlVertexArrayObject};
 
-use crate::mesh::{Attribute, AttributeVec, Mesh, PrimitiveType};
 use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
+use crate::mesh::{Attribute, AttributeVec, Mesh, PrimitiveType};
 
 pub struct Vao {
     gl: WebGl2RenderingContext,

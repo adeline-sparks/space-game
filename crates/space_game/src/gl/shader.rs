@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use crate::mesh::Attribute;
 use crate::gl::{webgl_type, Context};
+use crate::mesh::Attribute;
 
 pub struct Shader {
     gl: WebGl2RenderingContext,

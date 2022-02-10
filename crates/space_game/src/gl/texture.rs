@@ -35,7 +35,6 @@ impl Texture {
             WebGl2RenderingContext::TEXTURE_MAG_FILTER,
             WebGl2RenderingContext::NEAREST as i32,
         );
-
         Ok(Texture {
             gl: gl.clone(),
             texture,
