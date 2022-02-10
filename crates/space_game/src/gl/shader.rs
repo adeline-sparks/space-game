@@ -5,7 +5,7 @@ use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 use crate::mesh::Attribute;
-use crate::render::{webgl_type, Context};
+use crate::gl::{webgl_type, Context};
 
 pub struct Shader {
     gl: WebGl2RenderingContext,

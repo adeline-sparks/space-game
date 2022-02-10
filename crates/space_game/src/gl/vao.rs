@@ -4,7 +4,7 @@ use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlBuffer, WebGlVertexArrayObject};
 
 use crate::mesh::{Attribute, AttributeVec, Mesh, PrimitiveType};
-use crate::render::{webgl_scalar_count, webgl_scalar_type, Context};
+use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
 
 pub struct Vao {
     gl: WebGl2RenderingContext,

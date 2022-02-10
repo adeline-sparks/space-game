@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Mesh {
     pub attributes: HashMap<AttributeName, AttributeVec>,
     pub indices: Option<Vec<u16>>,
@@ -10,11 +11,10 @@ pub struct Mesh {
 }
 
 pub type AttributeName = Cow<'static, str>;
-
 pub const POSITION: AttributeName = Cow::Borrowed("vert_pos");
 pub const NORMAL: AttributeName = Cow::Borrowed("vert_normal");
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AttributeVec {
     Vec2(Vec<Vec2>),
     Vec3(Vec<Vec3>),
@@ -32,7 +32,7 @@ pub enum AttributeType {
     Vec3,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {
     LINES,
     TRIANGLES,
@@ -128,6 +128,13 @@ impl AttributeVec {
         match self {
             AttributeVec::Vec2(v) => v.is_empty(),
             AttributeVec::Vec3(v) => v.is_empty(),
+        }
+    }
+
+    pub fn type_(&self) -> AttributeType {
+        match self {
+            AttributeVec::Vec2(_) => AttributeType::Vec2,
+            AttributeVec::Vec3(_) => AttributeType::Vec3,
         }
     }
 }

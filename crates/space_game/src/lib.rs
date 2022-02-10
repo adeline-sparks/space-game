@@ -5,12 +5,12 @@ use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
-use render::{Context, Shader, Texture, Vao};
+use gl::{Context, Shader, Texture, Vao};
 use wasm_bindgen::prelude::*;
 
 pub mod dom;
 pub mod mesh;
-pub mod render;
+pub mod gl;
 pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
 
