@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
-use mesh::{Attribute, AttributeVec, Mesh, PrimitiveType, NORMAL, POSITION};
+use mesh::{Attribute, NORMAL, POSITION};
 use render::{Context, Shader, Texture, Vao};
 use wasm_bindgen::prelude::*;
 
@@ -54,30 +54,15 @@ async fn main_render() -> Result<(), JsValue> {
         },
     ];
 
-    let mut position_vec = Vec::new();
-    let mut normal_vec = Vec::new();
-    marching_cubes(
+    let mesh = marching_cubes(
         &Sphere(32.0),
         (
             Vec3::new(-128.0, -128.0, -128.0),
             Vec3::new(128.0, 128.0, 128.0),
         ),
         IVec3::new(32, 32, 32),
-        &mut |v1, v2, v3, n1, n2, n3| {
-            position_vec.push(v1);
-            position_vec.push(v2);
-            position_vec.push(v3);
-            normal_vec.push(n1);
-            normal_vec.push(n2);
-            normal_vec.push(n3);
-        },
     );
 
-    let mut mesh = Mesh::new(PrimitiveType::TRIANGLES);
-    mesh.attributes
-        .insert(POSITION, AttributeVec::Vec3(position_vec));
-    mesh.attributes
-        .insert(NORMAL, AttributeVec::Vec3(normal_vec));
     let vao = Vao::build(&context, attributes, &mesh)?;
 
     let shader = Shader::compile(

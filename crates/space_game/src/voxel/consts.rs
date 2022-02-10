@@ -1,4 +1,32 @@
-pub const CASE_TRIS: [&[[u8; 3]]; 256] = [
+pub const NUM_CORNERS: u8 = 8;
+pub static CORNER_OFFSETS: [[u8; 3]; NUM_CORNERS as usize] = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+];
+
+pub const NUM_EDGES: u8 = 12;
+pub static EDGE_CORNERS: [[u8; 2]; NUM_EDGES as usize] = [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 4],
+    [0, 4],
+    [1, 5],
+    [2, 6],
+    [3, 7],
+];
+
+pub static CASE_TABLE: [&[[u8; 3]]; 256] = [
     &[],
     &[[0, 8, 3]],
     &[[0, 1, 9]],
