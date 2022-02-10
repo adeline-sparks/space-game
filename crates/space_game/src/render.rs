@@ -7,10 +7,12 @@ use crate::dom;
 mod mesh;
 mod shader;
 mod texture;
+mod vao;
 
-pub use mesh::{Attribute, Mesh, MeshBuilder, MeshBuilderMode};
+pub use mesh::{Attribute, AttributeName, AttributeVec, Mesh, PrimitiveType, POSITION, NORMAL};
 pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
+pub use vao::Vao;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DataType {
@@ -100,7 +102,7 @@ impl Context {
         self.gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
     }
 
-    pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], mesh: &Mesh) {
+    pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], vao: &Vao) {
         self.gl.viewport(
             0,
             0,
@@ -109,8 +111,8 @@ impl Context {
         );
         self.gl.enable(WebGl2RenderingContext::CULL_FACE);
         self.gl.front_face(WebGl2RenderingContext::CW);
-        shader.use_(&self.gl);
+        shader.use_();
         Texture::bind(textures, &self.gl);
-        mesh.draw(&self.gl);
+        vao.draw();
     }
 }

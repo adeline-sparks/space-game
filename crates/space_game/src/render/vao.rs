@@ -1,0 +1,133 @@
+use glam::{Vec2, Vec3};
+use js_sys::{Uint8Array, Uint16Array};
+use wasm_bindgen::JsValue;
+use web_sys::{WebGlVertexArrayObject, WebGl2RenderingContext, WebGlBuffer};
+
+use super::{Context};
+use super::mesh::{Mesh, PrimitiveType, Attribute, AttributeVec};
+
+pub struct Vao {
+    gl: WebGl2RenderingContext,
+    vao: WebGlVertexArrayObject,
+    vert_buffer: WebGlBuffer,
+    index_buffer: Option<WebGlBuffer>,
+    mode: u32,
+    vert_count: i32,
+}
+
+impl Vao {
+    pub fn build(context: &Context, attributes: &[Attribute], mesh: &Mesh) -> Result<Self, JsValue> {
+        let vert_count = mesh.vert_count().ok_or_else(|| JsValue::from("Inconsistent mesh"))?;
+
+        let gl = &context.gl;
+        let vao = gl
+            .create_vertex_array()
+            .ok_or_else(|| JsValue::from("Failed to create_vertex_array"))?;
+        gl.bind_vertex_array(Some(&vao));
+
+        let active_attributes = attributes
+            .iter()
+            .enumerate()
+            .filter(|&(_, a)| mesh.attributes.contains_key(&a.name))
+            .collect::<Vec<_>>();
+        let stride: usize = active_attributes
+            .iter()
+            .map(|&(_, a)| a.type_.num_bytes())
+            .sum();
+
+        let vert_buffer = gl
+            .create_buffer()
+            .ok_or_else(|| JsValue::from("failed to create vertex buffer"))?;
+        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
+
+        let mut vert_buffer_data = vec![0u8; stride * vert_count];
+        let mut offset = 0;
+        for &(i, attr) in &active_attributes {
+            gl.enable_vertex_attrib_array(i as u32);
+            gl.vertex_attrib_pointer_with_i32(
+                i as u32,
+                attr.type_.num_components() as i32,
+                attr.type_.webgl_scalar_type(),
+                false,
+                stride as i32,
+                offset as i32,
+            );
+            pack_attribute_vec(stride, offset, &mesh.attributes[&attr.name], &mut vert_buffer_data);
+            offset += attr.type_.num_bytes();
+        }
+
+        gl.buffer_data_with_array_buffer_view(
+            WebGl2RenderingContext::ARRAY_BUFFER,
+            &Uint8Array::from(vert_buffer_data.as_slice()),
+            WebGl2RenderingContext::STATIC_DRAW,
+        );
+
+        let index_buffer = if let Some(indices) = &mesh.indices {
+            let buf = gl
+                .create_buffer()
+                .ok_or_else(|| JsValue::from("failed to create index buffer"))?;
+            gl.bind_buffer(
+                WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+                Some(&buf),
+            );
+            gl.buffer_data_with_array_buffer_view(
+                WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+                &Uint16Array::from(indices.as_slice()),
+                WebGl2RenderingContext::STATIC_DRAW,
+            );
+            Some(buf)
+        } else {
+            None
+        };
+
+        let mode = match mesh.primitive_type {
+            PrimitiveType::TRIANGLES => WebGl2RenderingContext::TRIANGLES,
+            PrimitiveType::LINES => WebGl2RenderingContext::LINES,
+        };
+
+        Ok(Vao {
+            gl: gl.clone(),
+            vao,
+            vert_buffer,
+            index_buffer,
+            mode,
+            vert_count: vert_count as i32,
+        })
+    }
+
+    pub fn draw(&self) {
+        self.gl.bind_vertex_array(Some(&self.vao));
+        if self.index_buffer.is_some() {
+            self.gl.draw_elements_with_i32(
+                self.mode,
+                self.vert_count,
+                WebGl2RenderingContext::UNSIGNED_SHORT,
+                0,
+            );
+        } else {
+            self.gl.draw_arrays(self.mode, 0, self.vert_count);
+        }
+    }
+}
+
+fn pack_attribute_vec(
+    stride: usize,
+    offset: usize,
+    attr_vec: &AttributeVec,
+    out: &mut [u8],
+) {
+    match attr_vec {
+        AttributeVec::Vec2(vecs) => {
+            for (i, vec) in vecs.iter().enumerate() {
+                let pos = (i * stride) + offset;
+                out[pos..pos+8].copy_from_slice(bytemuck::cast_ref::<Vec2, [u8; 8]>(vec));
+            }
+        }
+        AttributeVec::Vec3(vecs) => {
+            for (i, vec) in vecs.iter().enumerate() {
+                let pos = (i * stride) + offset;
+                out[pos..pos+12].copy_from_slice(bytemuck::cast_ref::<Vec3, [u8; 12]>(vec));
+            }
+        }
+    }
+}

@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
-use render::{Attribute, Context, DataType, MeshBuilder, MeshBuilderMode, Shader, Texture};
+use render::{Attribute, Context, DataType, Mesh, Shader, Texture, POSITION, NORMAL, PrimitiveType, AttributeVec, Vao};
 use wasm_bindgen::prelude::*;
 
 mod dom;
@@ -40,17 +40,12 @@ async fn main_render() -> Result<(), JsValue> {
     let texture = Texture::load(&context, "floors.png").await?;
 
     let attributes = &[
-        Attribute {
-            name: "vert_pos".to_string(),
-            type_: DataType::Vec3,
-        },
-        Attribute {
-            name: "vert_normal".to_string(),
-            type_: DataType::Vec3,
-        },
+        Attribute { name: POSITION, type_: DataType::Vec3 },
+        Attribute { name: NORMAL, type_: DataType::Vec3 },
     ];
 
-    let mut builder = MeshBuilder::new(attributes, MeshBuilderMode::SOLID);
+    let mut position_vec = Vec::new();
+    let mut normal_vec = Vec::new();
     marching_cubes(
         &Sphere(32.0),
         (
@@ -59,19 +54,19 @@ async fn main_render() -> Result<(), JsValue> {
         ),
         IVec3::new(32, 32, 32),
         &mut |v1, v2, v3, n1, n2, n3| {
-            builder.write_attribute(v1);
-            builder.write_attribute(n1);
-            let i1 = builder.finish_vert();
-            builder.write_attribute(v2);
-            builder.write_attribute(n2);
-            let i2 = builder.finish_vert();
-            builder.write_attribute(v3);
-            builder.write_attribute(n3);
-            let i3 = builder.finish_vert();
-            builder.write_triangle(i1, i2, i3);
+            position_vec.push(v1);
+            position_vec.push(v2);
+            position_vec.push(v3);
+            normal_vec.push(n1);
+            normal_vec.push(n2);
+            normal_vec.push(n3);
         },
     );
-    let mesh = builder.build(&context)?;
+
+    let mut mesh = Mesh::new(PrimitiveType::TRIANGLES);
+    mesh.attributes.insert(POSITION, AttributeVec::Vec3(position_vec));
+    mesh.attributes.insert(NORMAL, AttributeVec::Vec3(normal_vec));
+    let vao = Vao::build(&context, attributes, &mesh)?;
 
     let shader = Shader::compile(
         &context,
@@ -146,7 +141,7 @@ async fn main_render() -> Result<(), JsValue> {
         let model_view_projection = projection * model_view;
         shader.set_uniform(&model_view_projection_loc, model_view_projection);
         shader.set_uniform(&normal_matrix_loc, model_view.inverse().transpose());
-        context.draw(&shader, &[Some(&texture)], &mesh);
+        context.draw(&shader, &[Some(&texture)], &vao);
     }
 }
 

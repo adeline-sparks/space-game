@@ -4,8 +4,7 @@ use std::marker::PhantomData;
 use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::mesh::Attribute;
-use super::{Context, DataType};
+use super::{Attribute, Context, DataType};
 
 pub struct Shader {
     gl: WebGl2RenderingContext,
@@ -53,7 +52,7 @@ impl Shader {
 
         let attribute_map = attributes
             .iter()
-            .map(|attr| (attr.name.as_str(), attr))
+            .map(|attr| (attr.name.as_ref(), attr))
             .collect::<HashMap<_, _>>();
         for i in 0..num_active_attributes {
             let info = gl
@@ -92,9 +91,9 @@ impl Shader {
         self.gl.use_program(Some(&self.program));
         value.set_uniform(&self.gl, &uniform.location);
     }
-
-    pub(super) fn use_(&self, gl: &WebGl2RenderingContext) {
-        gl.use_program(Some(&self.program));
+ 
+    pub fn use_(&self) {
+        self.gl.use_program(Some(&self.program));
     }
 }
 

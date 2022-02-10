@@ -1,199 +1,129 @@
-use js_sys::{Uint16Array, Uint8Array};
-use wasm_bindgen::JsValue;
-use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject, WebGlBuffer};
+use std::{borrow::Cow, collections::HashMap};
 
-use super::{Context, DataType};
+use glam::{Vec2, Vec3};
+
+use super::DataType;
 
 pub struct Mesh {
-    gl: WebGl2RenderingContext,
-    vao: WebGlVertexArrayObject,
-    vert_buffer: WebGlBuffer,
-    index_buffer: WebGlBuffer,
-    mode: u32,
-    vert_count: i32,
+    pub attributes: HashMap<AttributeName, AttributeVec>,
+    pub indices: Option<Vec<u16>>,
+    pub primitive_type: PrimitiveType,
 }
 
-pub struct MeshBuilder<'a> {
-    attributes: &'a [Attribute],
-    mode: MeshBuilderMode,
-    bytes: Vec<u8>,
-    indices: Vec<u16>,
-    attribute_num: usize,
-    vertex_num: usize,
+pub type AttributeName = Cow<'static, str>;
+
+pub const POSITION: AttributeName = Cow::Borrowed("vert_pos");
+pub const NORMAL: AttributeName = Cow::Borrowed("vert_normal");
+
+#[derive(Clone, PartialEq)]
+pub enum AttributeVec {
+    Vec2(Vec<Vec2>),
+    Vec3(Vec<Vec3>),
 }
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute {
-    pub name: String,
+    pub name: AttributeName,
     pub type_: DataType,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MeshBuilderMode {
-    SOLID,
-    WIREFRAME,
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum PrimitiveType {
+    LINES,
+    TRIANGLES,
 }
 
 impl Mesh {
-    pub(super) fn draw(&self, gl: &WebGl2RenderingContext) {
-        gl.bind_vertex_array(Some(&self.vao));
-        gl.draw_elements_with_i32(
-            self.mode,
-            self.vert_count,
-            WebGl2RenderingContext::UNSIGNED_SHORT,
-            0,
-        );
-    }
-}
-
-impl<'a> MeshBuilder<'a> {
-    pub fn new(attributes: &'a [Attribute], mode: MeshBuilderMode) -> Self {
-        MeshBuilder {
-            attributes,
-            mode,
-            bytes: Vec::new(),
-            indices: Vec::new(),
-            attribute_num: 0,
-            vertex_num: 0,
+    pub fn new(primitive_type: PrimitiveType) -> Self {
+        Mesh {
+            attributes: HashMap::new(),
+            indices: None,
+            primitive_type,
         }
     }
 
-    pub fn write_attribute<V: AttributeValue>(&mut self, val: V) {
-        assert!(self.attributes[self.attribute_num].type_ == V::RENDER_TYPE);
-        self.attribute_num += 1;
-        val.push(&mut self.bytes);
+    pub fn vert_count(&self) -> Option<usize> {
+        let vert_count = self.attributes.values().next()?.len();
+        if self.attributes.values().any(|a| a.len() != vert_count) {
+            return None;
+        }
+
+        Some(vert_count)
     }
 
-    pub fn finish_vert(&mut self) -> u16 {
-        assert!(self.attribute_num == self.attributes.len());
-        let result: u16 = self.vertex_num.try_into().unwrap();
-        self.vertex_num += 1;
-        self.attribute_num = 0;
-        result
-    }
+    pub fn validate(&self) -> Result<(), ()> {
+        let num_verts = self.vert_count().ok_or(())?;
+        if (num_verts % self.primitive_type.num_verts()) != 0 {
+            return Err(());
+        }
 
-    pub fn write_triangle(&mut self, id1: u16, id2: u16, id3: u16) {
-        match self.mode {
-            MeshBuilderMode::SOLID => {
-                self.indices.extend_from_slice(&[id1, id2, id3]);
-            }
-            MeshBuilderMode::WIREFRAME => {
-                self.indices
-                    .extend_from_slice(&[id1, id2, id2, id3, id3, id1]);
+        let max: u16 = (num_verts - 1).try_into().map_err(|_| ())?;
+        if let Some(indices) = &self.indices {
+            if indices.iter().any(|&i| i > max) {
+                return Err(());
             }
         }
+
+        return Ok(());
     }
 
-    pub fn build(&self, context: &Context) -> Result<Mesh, JsValue> {
-        let gl = &context.gl;
-        assert!(self.attribute_num == 0);
+    pub fn make_wireframe(&mut self) -> Result<(), ()> {
+        match (self.primitive_type, &mut self.indices) {
+            (PrimitiveType::LINES, _) => {
+                return Ok(());
+            }
+            (PrimitiveType::TRIANGLES, Some(indices)) => {
+                let chunks = indices.chunks_exact(3);
+                if !chunks.remainder().is_empty() {
+                    return Err(());
+                }
 
-        let vao = gl
-            .create_vertex_array()
-            .ok_or_else(|| JsValue::from("Failed to create_vertex_array"))?;
-        gl.bind_vertex_array(Some(&vao));
+                *indices = chunks
+                    .map(|c| [c[0], c[1], c[1], c[2], c[2], c[0]])
+                    .flatten()
+                    .collect();
+            },
+            (PrimitiveType::TRIANGLES, None) => {
+                let num_verts = self.vert_count().ok_or(())?;
+                let mut indices = Vec::with_capacity(num_verts * 2);
+                for i in 0..(num_verts / 3) {
+                    let v0 = (3 * i) as u16;
+                    let v1 = v0 + 1;
+                    let v2 = v0 + 2;
+                    indices.extend_from_slice(&[v0, v1, v1, v2, v2, v0]);
+                }
 
-        let vert_buffer = gl
-            .create_buffer()
-            .ok_or_else(|| JsValue::from("failed to create vertex buffer"))?;
-        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
-        gl.buffer_data_with_array_buffer_view(
-            WebGl2RenderingContext::ARRAY_BUFFER,
-            &Uint8Array::from(self.bytes.as_slice()),
-            WebGl2RenderingContext::STATIC_DRAW,
-        );
-
-        let stride: usize = self.attributes.iter().map(|a| a.type_.num_bytes()).sum();
-        let mut offset = 0;
-        for (i, attr) in self.attributes.iter().enumerate() {
-            gl.enable_vertex_attrib_array(i as u32);
-            gl.vertex_attrib_pointer_with_i32(
-                i as u32,
-                attr.type_.num_components() as i32,
-                attr.type_.webgl_scalar_type(),
-                false,
-                stride as i32,
-                offset as i32,
-            );
-            offset += attr.type_.num_bytes();
+                self.indices = Some(indices);
+            }
         }
 
-        let index_buffer = gl
-            .create_buffer()
-            .ok_or_else(|| JsValue::from("failed to create index buffer"))?;
-        gl.bind_buffer(
-            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
-            Some(&index_buffer),
-        );
-        gl.buffer_data_with_array_buffer_view(
-            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
-            &Uint16Array::from(self.indices.as_slice()),
-            WebGl2RenderingContext::STATIC_DRAW,
-        );
-
-        let mode = match self.mode {
-            MeshBuilderMode::SOLID => WebGl2RenderingContext::TRIANGLES,
-            MeshBuilderMode::WIREFRAME => WebGl2RenderingContext::LINES,
-        };
-
-        Ok(Mesh {
-            gl: gl.clone(),
-            vao,
-            vert_buffer,
-            index_buffer,
-            mode,
-            vert_count: self.indices.len() as i32,
-        })
+        self.primitive_type = PrimitiveType::LINES;
+        Ok(())
     }
 }
 
-impl Drop for Mesh {
-    fn drop(&mut self) {
-        self.gl.delete_buffer(Some(&self.vert_buffer));
-        self.gl.delete_buffer(Some(&self.index_buffer));
+impl AttributeVec {
+    pub fn len(&self) -> usize {
+        match self {
+            AttributeVec::Vec2(v) => v.len(),
+            AttributeVec::Vec3(v) => v.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            AttributeVec::Vec2(v) => v.is_empty(),
+            AttributeVec::Vec3(v) => v.is_empty(),
+        }
     }
 }
 
-pub trait AttributeValue {
-    const RENDER_TYPE: DataType;
-
-    fn push(&self, bytes: &mut Vec<u8>);
-}
-
-impl AttributeValue for f32 {
-    const RENDER_TYPE: DataType = DataType::Float;
-
-    fn push(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(&self.to_ne_bytes());
-    }
-}
-
-impl AttributeValue for glam::Vec2 {
-    const RENDER_TYPE: DataType = DataType::Vec2;
-
-    fn push(&self, bytes: &mut Vec<u8>) {
-        self.x.push(bytes);
-        self.y.push(bytes);
-    }
-}
-
-impl AttributeValue for glam::Vec3 {
-    const RENDER_TYPE: DataType = DataType::Vec3;
-
-    fn push(&self, bytes: &mut Vec<u8>) {
-        self.x.push(bytes);
-        self.y.push(bytes);
-        self.z.push(bytes);
-    }
-}
-
-impl AttributeValue for glam::Vec4 {
-    const RENDER_TYPE: DataType = DataType::Vec4;
-
-    fn push(&self, bytes: &mut Vec<u8>) {
-        self.x.push(bytes);
-        self.y.push(bytes);
-        self.z.push(bytes);
-        self.w.push(bytes);
+impl PrimitiveType {
+    pub fn num_verts(self) -> usize {
+        match self {
+            PrimitiveType::LINES => 2,
+            PrimitiveType::TRIANGLES => 3,
+        }
     }
 }
