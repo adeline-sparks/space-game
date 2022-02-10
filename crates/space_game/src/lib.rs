@@ -4,13 +4,17 @@ use std::f64::consts::PI;
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
 use log::info;
-use render::{Attribute, Context, DataType, Mesh, Shader, Texture, POSITION, NORMAL, PrimitiveType, AttributeVec, Vao};
+use mesh::{Attribute, AttributeVec, Mesh, PrimitiveType, NORMAL, POSITION};
+use render::{Context, Shader, Texture, Vao};
 use wasm_bindgen::prelude::*;
 
-mod dom;
-mod render;
-mod voxel;
+pub mod dom;
+pub mod mesh;
+pub mod render;
+pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
+
+use crate::mesh::AttributeType;
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -40,8 +44,14 @@ async fn main_render() -> Result<(), JsValue> {
     let texture = Texture::load(&context, "floors.png").await?;
 
     let attributes = &[
-        Attribute { name: POSITION, type_: DataType::Vec3 },
-        Attribute { name: NORMAL, type_: DataType::Vec3 },
+        Attribute {
+            name: POSITION,
+            type_: AttributeType::Vec3,
+        },
+        Attribute {
+            name: NORMAL,
+            type_: AttributeType::Vec3,
+        },
     ];
 
     let mut position_vec = Vec::new();
@@ -64,8 +74,10 @@ async fn main_render() -> Result<(), JsValue> {
     );
 
     let mut mesh = Mesh::new(PrimitiveType::TRIANGLES);
-    mesh.attributes.insert(POSITION, AttributeVec::Vec3(position_vec));
-    mesh.attributes.insert(NORMAL, AttributeVec::Vec3(normal_vec));
+    mesh.attributes
+        .insert(POSITION, AttributeVec::Vec3(position_vec));
+    mesh.attributes
+        .insert(NORMAL, AttributeVec::Vec3(normal_vec));
     let vao = Vao::build(&context, attributes, &mesh)?;
 
     let shader = Shader::compile(

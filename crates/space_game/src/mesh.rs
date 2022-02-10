@@ -1,8 +1,7 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
+use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
-
-use super::DataType;
 
 pub struct Mesh {
     pub attributes: HashMap<AttributeName, AttributeVec>,
@@ -21,11 +20,16 @@ pub enum AttributeVec {
     Vec3(Vec<Vec3>),
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute {
     pub name: AttributeName,
-    pub type_: DataType,
+    pub type_: AttributeType,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum AttributeType {
+    Vec2,
+    Vec3,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -58,8 +62,8 @@ impl Mesh {
             return Err(());
         }
 
-        let max: u16 = (num_verts - 1).try_into().map_err(|_| ())?;
         if let Some(indices) = &self.indices {
+            let max: u16 = (num_verts - 1).try_into().map_err(|_| ())?;
             if indices.iter().any(|&i| i > max) {
                 return Err(());
             }
@@ -83,7 +87,7 @@ impl Mesh {
                     .map(|c| [c[0], c[1], c[1], c[2], c[2], c[0]])
                     .flatten()
                     .collect();
-            },
+            }
             (PrimitiveType::TRIANGLES, None) => {
                 let num_verts = self.vert_count().ok_or(())?;
                 let mut indices = Vec::with_capacity(num_verts * 2);
@@ -100,6 +104,15 @@ impl Mesh {
 
         self.primitive_type = PrimitiveType::LINES;
         Ok(())
+    }
+}
+
+impl AttributeType {
+    pub fn byte_count(&self) -> usize {
+        match self {
+            AttributeType::Vec2 => 2 * 4,
+            AttributeType::Vec3 => 3 * 4,
+        }
     }
 }
 

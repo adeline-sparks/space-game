@@ -3,77 +3,34 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::dom;
+use crate::mesh::AttributeType;
 
-mod mesh;
 mod shader;
 mod texture;
 mod vao;
 
-pub use mesh::{Attribute, AttributeName, AttributeVec, Mesh, PrimitiveType, POSITION, NORMAL};
 pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
 pub use vao::Vao;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum DataType {
-    Float,
-    Vec2,
-    Vec3,
-    Vec4,
-    Mat3x3,
-    Mat4x4,
-    Int,
-    Sampler2D,
+fn webgl_scalar_count(type_: AttributeType) -> i32 {
+    match type_ {
+        AttributeType::Vec2 => 2,
+        AttributeType::Vec3 => 3,
+    }
 }
 
-impl DataType {
-    pub fn num_components(self) -> u32 {
-        match self {
-            Self::Float => 1,
-            Self::Vec2 => 2,
-            Self::Vec3 => 3,
-            Self::Vec4 => 4,
-            Self::Mat3x3 => 3 * 3,
-            Self::Mat4x4 => 4 * 4,
-            Self::Int => 1,
-            Self::Sampler2D => 1,
-        }
+fn webgl_scalar_type(type_: AttributeType) -> u32 {
+    match type_ {
+        AttributeType::Vec2 => WebGl2RenderingContext::FLOAT,
+        AttributeType::Vec3 => WebGl2RenderingContext::FLOAT,
     }
+}
 
-    pub fn num_bytes(self) -> usize {
-        match self {
-            Self::Float => 4,
-            Self::Vec2 => 2 * 4,
-            Self::Vec3 => 3 * 4,
-            Self::Vec4 => 4 * 4,
-            Self::Mat3x3 => 3 * 3 * 4,
-            Self::Mat4x4 => 4 * 4 * 4,
-            Self::Int => 4,
-            Self::Sampler2D => 4,
-        }
-    }
-
-    pub fn webgl_scalar_type(self) -> u32 {
-        match self {
-            Self::Float | Self::Vec2 | Self::Vec3 | Self::Vec4 | Self::Mat3x3 | Self::Mat4x4 => {
-                WebGl2RenderingContext::FLOAT
-            }
-            Self::Int => WebGl2RenderingContext::INT,
-            Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
-        }
-    }
-
-    pub fn webgl_type(self) -> u32 {
-        match self {
-            Self::Float => WebGl2RenderingContext::FLOAT,
-            Self::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
-            Self::Vec3 => WebGl2RenderingContext::FLOAT_VEC3,
-            Self::Vec4 => WebGl2RenderingContext::FLOAT_VEC4,
-            Self::Mat3x3 => WebGl2RenderingContext::FLOAT_MAT3,
-            Self::Mat4x4 => WebGl2RenderingContext::FLOAT_MAT4,
-            Self::Int => WebGl2RenderingContext::INT,
-            Self::Sampler2D => WebGl2RenderingContext::SAMPLER_2D,
-        }
+fn webgl_type(type_: AttributeType) -> u32 {
+    match type_ {
+        AttributeType::Vec2 => WebGl2RenderingContext::FLOAT_VEC2,
+        AttributeType::Vec3 => WebGl2RenderingContext::FLOAT_VEC3,
     }
 }
 

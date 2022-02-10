@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use super::{Attribute, Context, DataType};
+use crate::mesh::Attribute;
+use crate::render::{webgl_type, Context};
 
 pub struct Shader {
     gl: WebGl2RenderingContext,
@@ -63,12 +64,13 @@ impl Shader {
                 format!("Shader requires unknown vertex attribute {}", info.name())
             })?;
 
-            if info.type_() != attribute.type_.webgl_type() {
+            let type_ = webgl_type(attribute.type_);
+            if info.type_() != type_ {
                 return Err(JsValue::from(format!(
                     "Data type mismatch on attribute {} (Found {:#04X} expected {:#04X})",
                     info.name(),
                     info.type_(),
-                    attribute.type_.webgl_type(),
+                    type_
                 )));
             }
         }
@@ -91,7 +93,7 @@ impl Shader {
         self.gl.use_program(Some(&self.program));
         value.set_uniform(&self.gl, &uniform.location);
     }
- 
+
     pub fn use_(&self) {
         self.gl.use_program(Some(&self.program));
     }
@@ -134,73 +136,55 @@ pub struct Uniform<T: UniformValue> {
 }
 
 pub trait UniformValue {
-    const RENDER_TYPE: DataType;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation);
 }
 
 impl UniformValue for f32 {
-    const RENDER_TYPE: DataType = DataType::Float;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform1f(Some(&loc), *self);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform1f(Some(&loc), *self);
     }
 }
 
 impl UniformValue for glam::Vec2 {
-    const RENDER_TYPE: DataType = DataType::Vec2;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform2f(Some(&loc), self.x, self.y);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform2f(Some(&loc), self.x, self.y);
     }
 }
 
 impl UniformValue for glam::Vec3 {
-    const RENDER_TYPE: DataType = DataType::Vec3;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform3f(Some(&loc), self.x, self.y, self.z);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform3f(Some(&loc), self.x, self.y, self.z);
     }
 }
 
 impl UniformValue for glam::Vec4 {
-    const RENDER_TYPE: DataType = DataType::Vec4;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform4f(Some(&loc), self.x, self.y, self.z, self.w);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform4f(Some(&loc), self.x, self.y, self.z, self.w);
     }
 }
 
 impl UniformValue for glam::Mat3 {
-    const RENDER_TYPE: DataType = DataType::Mat3x3;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
     }
 }
 
 impl UniformValue for glam::Mat4 {
-    const RENDER_TYPE: DataType = DataType::Mat4x4;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_ref());
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_ref());
     }
 }
 
 impl UniformValue for i32 {
-    const RENDER_TYPE: DataType = DataType::Int;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform1i(Some(&loc), *self);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform1i(Some(&loc), *self);
     }
 }
 
 pub struct Sampler2D(pub u32);
 
 impl UniformValue for Sampler2D {
-    const RENDER_TYPE: DataType = DataType::Sampler2D;
-
-    fn set_uniform(&self, context: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        context.uniform1i(Some(&loc), self.0 as i32);
+    fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
+        gl.uniform1i(Some(&loc), self.0 as i32);
     }
 }

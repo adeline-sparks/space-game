@@ -4,7 +4,7 @@ use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
-pub struct Texture { 
+pub struct Texture {
     gl: WebGl2RenderingContext,
     texture: WebGlTexture,
 }
@@ -36,7 +36,10 @@ impl Texture {
             WebGl2RenderingContext::NEAREST as i32,
         );
 
-        Ok(Texture { gl: gl.clone(), texture })
+        Ok(Texture {
+            gl: gl.clone(),
+            texture,
+        })
     }
 
     pub fn bind(textures: &[Option<&Self>], gl: &WebGl2RenderingContext) {
