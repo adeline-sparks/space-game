@@ -24,15 +24,29 @@ pub fn start() {
     spawn(main_net());
 }
 
-struct Sphere(f32);
+struct Sphere(Vec3, f32);
 
 impl SignedDistanceFunction for Sphere {
     fn value(&self, pos: Vec3) -> f32 {
-        self.0 - pos.length()
+        (pos - self.0).length() - self.1
     }
 
     fn grad(&self, pos: Vec3) -> Vec3 {
-        -2.0 * pos
+        2.0 * pos
+    }
+}
+
+impl<A: SignedDistanceFunction, B: SignedDistanceFunction> SignedDistanceFunction for (A, B) {
+    fn value(&self, pos: Vec3) -> f32 {
+        let a = self.0.value(pos);
+        let b = self.1.value(pos);
+        if a < b { a } else { b }
+    }
+
+    fn grad(&self, pos: Vec3) -> Vec3 {
+        let a = self.0.value(pos);
+        let b = self.1.value(pos);
+        if a < b { self.0.grad(pos) } else { self.1.grad(pos) }        
     }
 }
 
@@ -55,7 +69,10 @@ async fn main_render() -> Result<(), JsValue> {
     ];
 
     let mesh = marching_cubes(
-        &Sphere(32.0),
+        &(
+            Sphere(Vec3::new(0.0, 0.0, 0.0), 50.0),
+            Sphere(Vec3::new(50.0, 0.0, 0.0), 30.0),
+        ),
         (
             Vec3::new(-128.0, -128.0, -128.0),
             Vec3::new(128.0, 128.0, 128.0),

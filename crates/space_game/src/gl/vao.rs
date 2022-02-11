@@ -93,11 +93,7 @@ impl Vao {
             PrimitiveType::LINES => WebGl2RenderingContext::LINES,
         };
 
-        let index_count = match &mesh.indices {
-            Some(vec) => vec.len(),
-            None => vert_count,
-        };
-        let index_count = index_count as i32;
+        let index_count = mesh.index_count().ok_or_else(|| JsValue::from("Failed to get index count"))? as i32;
 
         Ok(Vao {
             gl: gl.clone(),

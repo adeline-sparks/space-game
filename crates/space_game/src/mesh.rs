@@ -56,14 +56,21 @@ impl Mesh {
         Some(vert_count)
     }
 
+    pub fn index_count(&self) -> Option<usize> {
+        match &self.indices {
+            Some(vec) => Some(vec.len()),
+            None => self.vert_count()
+        }
+    }
+
     pub fn validate(&self) -> Result<(), ()> {
-        let num_verts = self.vert_count().ok_or(())?;
-        if (num_verts % self.primitive_type.num_verts()) != 0 {
+        let index_count = self.index_count().ok_or(())?;
+        if (index_count % self.primitive_type.num_verts()) != 0 {
             return Err(());
         }
 
         if let Some(indices) = &self.indices {
-            let max: u16 = (num_verts - 1).try_into().map_err(|_| ())?;
+            let max: u16 = (index_count - 1).try_into().map_err(|_| ())?;
             if indices.iter().any(|&i| i > max) {
                 return Err(());
             }
