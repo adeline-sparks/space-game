@@ -1,6 +1,6 @@
 use super::Context;
-use crate::dom;
-use wasm_bindgen::JsValue;
+use crate::dom::{self, DomError};
+use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
@@ -9,13 +9,17 @@ pub struct Texture {
     texture: WebGlTexture,
 }
 
+#[derive(Error, Debug)]
+#[error("Failed to create texture from \"{0}\"")]
+pub struct TextureError(String);
+
 impl Texture {
-    pub async fn load(context: &Context, src: &str) -> Result<Texture, JsValue> {
+    pub async fn load(context: &Context, src: &str) -> anyhow::Result<Texture> {
         let image = dom::load_image(src).await?;
         let gl = &context.gl;
         let texture = gl
             .create_texture()
-            .ok_or_else(|| JsValue::from("Failed to `create_texture`"))?;
+            .ok_or_else(|| TextureError(src.to_string()))?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
             WebGl2RenderingContext::TEXTURE_2D,
@@ -24,7 +28,7 @@ impl Texture {
             WebGl2RenderingContext::RGBA,
             WebGl2RenderingContext::UNSIGNED_BYTE,
             &image,
-        )?;
+        ).map_err(DomError::from)?;
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
             WebGl2RenderingContext::TEXTURE_MIN_FILTER,

@@ -14,7 +14,7 @@ pub mod mesh;
 pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
 
-use crate::mesh::AttributeType;
+use crate::{mesh::AttributeType, dom::DomError};
 
 #[wasm_bindgen(start)]
 pub fn start() {
@@ -50,7 +50,7 @@ impl<A: SignedDistanceFunction, B: SignedDistanceFunction> SignedDistanceFunctio
     }
 }
 
-async fn main_render() -> Result<(), JsValue> {
+async fn main_render() -> anyhow::Result<()> {
     dom::content_loaded().await?;
     let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
@@ -191,14 +191,14 @@ async fn main_render() -> Result<(), JsValue> {
     }
 }
 
-async fn animation_frame_seconds() -> Result<f64, JsValue> {
+async fn animation_frame_seconds() -> Result<f64, DomError> {
     Ok(dom::animation_frame().await? / 1e3)
 }
 
-async fn main_net() -> Result<(), JsValue> {
+async fn main_net() -> anyhow::Result<()> {
     info!("Creating websocket");
     let ws = open_websocket("ws://localhost:8000/ws/v1").await?;
     info!("Websocket connected");
-    ws.send_with_str("Hello World")?;
+    ws.send_with_str("Hello World").map_err(DomError::from)?;
     Ok(())
 }

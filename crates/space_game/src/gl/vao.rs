@@ -1,7 +1,7 @@
 use glam::{Vec2, Vec3};
 use js_sys::{Uint16Array, Uint8Array};
-use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlBuffer, WebGlVertexArrayObject};
+use anyhow::anyhow;
 
 use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
 use crate::mesh::{Attribute, AttributeVec, Mesh, PrimitiveType};
@@ -20,15 +20,13 @@ impl Vao {
         context: &Context,
         attributes: &[Attribute],
         mesh: &Mesh,
-    ) -> Result<Self, JsValue> {
-        let vert_count = mesh
-            .vert_count()
-            .ok_or_else(|| JsValue::from("Inconsistent mesh"))?;
+    ) -> anyhow::Result<Self> {
+        let vert_count = mesh.vert_count()?;
 
         let gl = &context.gl;
         let vao = gl
             .create_vertex_array()
-            .ok_or_else(|| JsValue::from("Failed to create_vertex_array"))?;
+            .ok_or_else(|| anyhow!("Failed to create_vertex_array"))?;
         gl.bind_vertex_array(Some(&vao));
 
         let active_attributes = attributes
@@ -43,7 +41,7 @@ impl Vao {
 
         let vert_buffer = gl
             .create_buffer()
-            .ok_or_else(|| JsValue::from("failed to create vertex buffer"))?;
+            .ok_or_else(|| anyhow!("Failed to create vertex buffer"))?;
         gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
 
         let mut vert_buffer_data = vec![0u8; stride * vert_count];
@@ -76,7 +74,7 @@ impl Vao {
         let index_buffer = if let Some(indices) = &mesh.indices {
             let buf = gl
                 .create_buffer()
-                .ok_or_else(|| JsValue::from("failed to create index buffer"))?;
+                .ok_or_else(|| anyhow!("Failed to create index buffer"))?;
             gl.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&buf));
             gl.buffer_data_with_array_buffer_view(
                 WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
@@ -93,7 +91,7 @@ impl Vao {
             PrimitiveType::LINES => WebGl2RenderingContext::LINES,
         };
 
-        let index_count = mesh.index_count().ok_or_else(|| JsValue::from("Failed to get index count"))? as i32;
+        let index_count = mesh.index_count()? as i32;
 
         Ok(Vao {
             gl: gl.clone(),

@@ -1,8 +1,9 @@
-use wasm_bindgen::{JsCast, JsValue};
+use thiserror::Error;
+use wasm_bindgen::JsCast;
 
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::dom;
+use crate::dom::{self, DomError};
 use crate::mesh::AttributeType;
 
 mod shader;
@@ -18,13 +19,18 @@ pub struct Context {
     canvas: HtmlCanvasElement,
 }
 
+#[derive(Error, Debug)]
+#[error("Failed to get WebGl2RenderingContext")]
+pub struct ContextError;
+
 impl Context {
-    pub fn from_canvas(element_id: &str) -> Result<Self, JsValue> {
+    pub fn from_canvas(element_id: &str) -> anyhow::Result<Self> {
         let canvas = dom::get_canvas(element_id)?;
         let gl = canvas
-            .get_context("webgl2")?
-            .ok_or_else(|| JsValue::from("Failed to get WebGl2RenderingContext"))?
-            .dyn_into::<WebGl2RenderingContext>()?;
+            .get_context("webgl2")
+            .map_err(DomError::from)?
+            .ok_or(ContextError)?
+            .unchecked_into::<WebGl2RenderingContext>();
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.enable(WebGl2RenderingContext::CULL_FACE);
         Ok(Context { gl, canvas })

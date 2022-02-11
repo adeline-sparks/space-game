@@ -9,7 +9,7 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Element, Event, KeyboardEvent, MouseEvent, WheelEvent};
 
-use super::{document, get_canvas};
+use super::{document, get_canvas, DomError};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Key(Cow<'static, str>);
@@ -87,7 +87,7 @@ const EVENT_TYPES: &[&str] = &[
 ];
 
 impl InputEventListener {
-    pub fn from_canvas(element_id: &str) -> Result<Self, JsValue> {
+    pub fn from_canvas(element_id: &str) -> Result<Self, DomError> {
         let canvas = get_canvas(element_id)?;
         canvas.set_tab_index(0);
         canvas.focus()?;
@@ -95,22 +95,17 @@ impl InputEventListener {
         Self::new(target)
     }
 
-    pub fn new(target: Element) -> Result<Self, JsValue> {
+    pub fn new(target: Element) -> Result<Self, DomError> {
         let state = Rc::new(RefCell::new(State::default()));
 
         let listener: Closure<dyn FnMut(JsValue) -> Result<(), JsValue>> = {
             let target = target.clone();
-            let state = Rc::downgrade(&state);
+            let state = state.clone();
+            let document = document()?;
 
             Closure::wrap(Box::new(move |ev: JsValue| {
-                let state = state
-                    .upgrade()
-                    .ok_or_else(|| JsValue::from_str("Dangling weak ptr"))?;
-                let ev = ev
-                    .dyn_ref::<Event>()
-                    .ok_or_else(|| JsValue::from_str("Failed to cast to Event"))?;
-
-                if document()?.pointer_lock_element().as_ref() == Some(&target) {
+                let ev = ev.unchecked_ref::<Event>();
+                if document.pointer_lock_element().as_ref() == Some(&target) {
                     ev.prevent_default();
                     state.borrow_mut().apply_event(ev);
                 } else if ev.type_() == "mousedown" {

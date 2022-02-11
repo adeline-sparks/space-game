@@ -1,7 +1,8 @@
-use std::borrow::Cow;
+use std::{borrow::Cow};
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mesh {
@@ -38,6 +39,23 @@ pub enum PrimitiveType {
     TRIANGLES,
 }
 
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum MeshError {
+    #[error("Mesh ends with incomplete primitive ({0} indices is not a multiple of {1})")]
+    IncompletePrimitive(usize, usize),
+    #[error("Too many indices for GPU upload")]
+    TooManyIndices(usize),
+    #[error("Index {0} out of bounds: {1} > {2}")]
+    IndexOutOfBounds(usize, u16, u16),
+    #[error("Two or more attributes have different lengths: `{first_name}` ({first_len}) and `{second_name}` ({second_len})")]
+    AttributeLengthMismatch {
+        first_name: AttributeName, 
+        first_len: usize,
+        second_name: AttributeName,
+        second_len: usize,
+    }
+}
+
 impl Mesh {
     pub fn new(primitive_type: PrimitiveType) -> Self {
         Mesh {
@@ -47,39 +65,32 @@ impl Mesh {
         }
     }
 
-    pub fn vert_count(&self) -> Option<usize> {
-        let vert_count = self.attributes.values().next()?.len();
-        if self.attributes.values().any(|a| a.len() != vert_count) {
-            return None;
+    pub fn vert_count(&self) -> Result<usize, MeshError> {
+        let (first_name, first_vec) = match self.attributes.iter().next() {
+            None => return Ok(0),
+            Some(v) => v,
+        };
+
+        if let Some((name, vec)) = self.attributes.iter().find(|(_, vec)| vec.len() != first_vec.len()) {
+            return Err(MeshError::AttributeLengthMismatch {
+                first_name: first_name.clone(),
+                first_len: first_vec.len(),
+                second_name: name.clone(),
+                second_len: vec.len(),
+            });
         }
 
-        Some(vert_count)
+        Ok(first_vec.len())
     }
 
-    pub fn index_count(&self) -> Option<usize> {
+    pub fn index_count(&self) -> Result<usize, MeshError> {
         match &self.indices {
-            Some(vec) => Some(vec.len()),
+            Some(indices) => Ok(indices.len()),
             None => self.vert_count()
         }
     }
 
-    pub fn validate(&self) -> Result<(), ()> {
-        let index_count = self.index_count().ok_or(())?;
-        if (index_count % self.primitive_type.num_verts()) != 0 {
-            return Err(());
-        }
-
-        if let Some(indices) = &self.indices {
-            let max: u16 = (index_count - 1).try_into().map_err(|_| ())?;
-            if indices.iter().any(|&i| i > max) {
-                return Err(());
-            }
-        }
-
-        return Ok(());
-    }
-
-    pub fn make_wireframe(&mut self) -> Result<(), ()> {
+    pub fn make_wireframe(&mut self) -> Result<(), MeshError> {
         match (self.primitive_type, &mut self.indices) {
             (PrimitiveType::LINES, _) => {
                 return Ok(());
@@ -87,7 +98,7 @@ impl Mesh {
             (PrimitiveType::TRIANGLES, Some(indices)) => {
                 let chunks = indices.chunks_exact(3);
                 if !chunks.remainder().is_empty() {
-                    return Err(());
+                    return Err(MeshError::IncompletePrimitive(indices.len(), 3));
                 }
 
                 *indices = chunks
@@ -96,7 +107,7 @@ impl Mesh {
                     .collect();
             }
             (PrimitiveType::TRIANGLES, None) => {
-                let num_verts = self.vert_count().ok_or(())?;
+                let num_verts = self.vert_count()?;
                 let mut indices = Vec::with_capacity(num_verts * 2);
                 for i in 0..(num_verts / 3) {
                     let v0 = (3 * i) as u16;
@@ -111,6 +122,26 @@ impl Mesh {
 
         self.primitive_type = PrimitiveType::LINES;
         Ok(())
+    }
+}
+
+impl Mesh {
+    pub fn validate(&self) -> Result<(), MeshError> {
+        let index_count = self.index_count().expect("Attribute lengths are validated");
+        let prim_verts = self.primitive_type.num_verts();
+        if (index_count % prim_verts) != 0 {
+            return Err(MeshError::IncompletePrimitive(index_count, prim_verts));
+        }
+
+        if let Some(indices) = &self.indices {
+            let max: u16 = (index_count - 1).try_into()
+                .map_err(|_| MeshError::TooManyIndices(index_count))?;
+            if let Some((i, val)) = indices.iter().cloned().enumerate().find(|&(_, val)| val > max) {
+                return Err(MeshError::IndexOutOfBounds(i, val, max));
+            }
+        }
+
+        return Ok(());
     }
 }
 

@@ -65,7 +65,7 @@ pub fn marching_cubes(
         .insert(POSITION, AttributeVec::Vec3(pos_vec));
     mesh.attributes
         .insert(NORMAL, AttributeVec::Vec3(normal_vec));
-    assert!(mesh.validate().is_ok());
+    assert_eq!(mesh.validate(), Ok(()));
     mesh
 }
 
