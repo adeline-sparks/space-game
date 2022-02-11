@@ -27,7 +27,7 @@ pub fn marching_cubes(
                 let mut case = 0;
                 for corner in 0..NUM_CORNERS {
                     let corner_pos = ipos_to_pos(ipos + corner_offset(corner));
-                    if sdf.value(corner_pos) > 0.0 {
+                    if sdf.value(corner_pos) < 0.0 {
                         case |= 1 << corner;
                     }
                 }
@@ -40,7 +40,6 @@ pub fn marching_cubes(
 
                     let val1 = sdf.value(pos1);
                     let val2 = sdf.value(pos2);
-                    assert!((val1 > 0.0) ^ (val2 > 0.0));
                     let scale = (val1 / (val1 - val2)).clamp(0.0, 1.0);
 
                     pos1.lerp(pos2, scale)

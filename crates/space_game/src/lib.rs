@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use gl::{Context, Shader, Texture, Vao};
-use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3, Vec4};
+use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
 use wasm_bindgen::prelude::*;
@@ -180,7 +180,7 @@ async fn main_render() -> Result<(), JsValue> {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
         }
 
-        context.clear(Vec4::new(0.0, 0.0, 0.0, 1.0));
+        context.clear();
         let model = Mat4::IDENTITY;
         let model_view = view.as_mat4() * model;
         let model_view_projection = projection * model_view;
