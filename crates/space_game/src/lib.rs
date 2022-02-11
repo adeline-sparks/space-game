@@ -130,6 +130,7 @@ async fn main_render() -> anyhow::Result<()> {
         uniform sampler2D tex_normal;
         uniform float tex_scale;
         uniform float tex_blend_sharpness;
+        uniform vec3 light_dir;
 
         in vec3 frag_world_pos;
         in vec3 frag_world_normal;
@@ -152,6 +153,7 @@ async fn main_render() -> anyhow::Result<()> {
                 texture(tex_normal, uv.xz).rgb,
                 texture(tex_normal, uv.xy).rgb
             );
+            normals = 2.0 * normals - 1.0;
             normals[0].xy += frag_world_normal.zy;
             normals[1].xy += frag_world_normal.xz;
             normals[2].xy += frag_world_normal.xy;
@@ -162,7 +164,7 @@ async fn main_render() -> anyhow::Result<()> {
             normals[1] = normals[1].xzy;
             vec3 normal = normals * weights;
 
-            out_color.rgb = normal;
+            out_color.rgb = dot(light_dir, -normal) + color;
             out_color.a = 1.0;
         }
         "##,
@@ -176,6 +178,7 @@ async fn main_render() -> anyhow::Result<()> {
     let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
+    let light_dir_loc = shader.uniform_location::<glam::Vec3>("light_dir")?;
 
     shader.set_uniform(&tex_scale_loc, 0.1);
     shader.set_uniform(&tex_blend_sharpness_loc, 2.0);
@@ -216,6 +219,8 @@ async fn main_render() -> anyhow::Result<()> {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
         }
 
+        let light_dir = DVec3::new((time / 2.0).cos(), 0.0, (time / 2.0).sin());
+
         context.clear();
         let model = Mat4::IDENTITY;
         let model_view = view.as_mat4() * model;
@@ -223,6 +228,7 @@ async fn main_render() -> anyhow::Result<()> {
         shader.set_uniform(&model_view_projection_loc, model_view_projection);
         shader.set_uniform(&model_matrix_loc, model);
         shader.set_uniform(&normal_matrix_loc, model.inverse().transpose());
+        shader.set_uniform(&light_dir_loc, light_dir.as_vec3());
         context.draw(&shader, &[Some(&color_texture), Some(&normal_texture)], &vao);
     }
 }
