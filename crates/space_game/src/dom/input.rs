@@ -7,7 +7,7 @@ use glam::IVec2;
 
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{Element, Event, KeyboardEvent, MouseEvent, WheelEvent};
+use web_sys::{Element, Event, KeyboardEvent, MouseEvent, WheelEvent, AddEventListenerOptions};
 
 use super::{document, get_canvas, DomError};
 
@@ -106,7 +106,9 @@ impl InputEventListener {
             Closure::wrap(Box::new(move |ev: JsValue| {
                 let ev = ev.unchecked_ref::<Event>();
                 if document.pointer_lock_element().as_ref() == Some(&target) {
-                    ev.prevent_default();
+                    if ev.type_() != "wheel" {
+                        ev.prevent_default();
+                    }
                     state.borrow_mut().apply_event(ev);
                 } else if ev.type_() == "mousedown" {
                     target.request_pointer_lock();
@@ -116,8 +118,12 @@ impl InputEventListener {
             }))
         };
 
-        for type_ in EVENT_TYPES {
-            target.add_event_listener_with_callback(type_, listener.as_ref().unchecked_ref())?;
+        for &type_ in EVENT_TYPES {
+            let passive = type_ == "wheel";
+            target.add_event_listener_with_callback_and_add_event_listener_options(
+                type_, 
+                listener.as_ref().unchecked_ref(),
+                AddEventListenerOptions::new().passive(passive))?;
         }
 
         Ok(InputEventListener {
