@@ -32,7 +32,7 @@ impl SignedDistanceFunction for Sphere {
     }
 
     fn grad(&self, pos: Vec3) -> Vec3 {
-        2.0 * pos
+        2.0 * (pos - self.0)
     }
 }
 
