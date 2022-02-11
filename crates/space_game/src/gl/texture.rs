@@ -10,16 +10,20 @@ pub struct Texture {
 }
 
 #[derive(Error, Debug)]
-#[error("Failed to create texture from \"{0}\"")]
-pub struct TextureError(String);
+pub enum TextureError {
+    #[error("Failed to create_texture")]
+    CreateTextureFailed,
+    #[error(transparent)]
+    DomError(#[from] DomError),
+}
 
 impl Texture {
-    pub async fn load(context: &Context, src: &str) -> anyhow::Result<Texture> {
+    pub async fn load(context: &Context, src: &str) -> Result<Texture, TextureError> {
         let image = dom::load_image(src).await?;
         let gl = &context.gl;
         let texture = gl
             .create_texture()
-            .ok_or_else(|| TextureError(src.to_string()))?;
+            .ok_or_else(|| TextureError::CreateTextureFailed)?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
             WebGl2RenderingContext::TEXTURE_2D,
@@ -30,16 +34,8 @@ impl Texture {
             &image,
         )
         .map_err(DomError::from)?;
-        gl.tex_parameteri(
-            WebGl2RenderingContext::TEXTURE_2D,
-            WebGl2RenderingContext::TEXTURE_MIN_FILTER,
-            WebGl2RenderingContext::NEAREST as i32,
-        );
-        gl.tex_parameteri(
-            WebGl2RenderingContext::TEXTURE_2D,
-            WebGl2RenderingContext::TEXTURE_MAG_FILTER,
-            WebGl2RenderingContext::NEAREST as i32,
-        );
+        gl.generate_mipmap(WebGl2RenderingContext::TEXTURE_2D);
+
         Ok(Texture {
             gl: gl.clone(),
             texture,
