@@ -59,13 +59,15 @@ impl Shader {
             .as_bool()
             != Some(true)
         {
-            return Err(ShaderError::LinkError(gl.get_program_info_log(&program).unwrap_or("get_program_info_log failed".into())));
+            return Err(ShaderError::LinkError(
+                gl.get_program_info_log(&program)
+                    .unwrap_or("get_program_info_log failed".into()),
+            ));
         }
 
         let num_active_attributes = gl
             .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
-            .unchecked_into_f64()
-            as usize;
+            .unchecked_into_f64() as usize;
 
         let attribute_map = attributes
             .iter()
@@ -76,13 +78,17 @@ impl Shader {
                 .get_active_attrib(&program, i as u32)
                 .expect("get_active_attrib failed");
 
-            let attribute = *attribute_map.get(info.name().as_str()).ok_or_else(|| {
-                ShaderError::UnknownAttribute(info.name().into())
-            })?;
+            let attribute = *attribute_map
+                .get(info.name().as_str())
+                .ok_or_else(|| ShaderError::UnknownAttribute(info.name().into()))?;
 
             let type_ = webgl_type(attribute.type_);
             if info.type_() != type_ {
-                return Err(ShaderError::AttributeTypeError(attribute.name.clone(), info.type_(), type_));
+                return Err(ShaderError::AttributeTypeError(
+                    attribute.name.clone(),
+                    info.type_(),
+                    type_,
+                ));
             }
         }
 
@@ -126,9 +132,11 @@ fn compile_shader(
         .as_bool()
         != Some(true)
     {
-        return Err(ShaderError::CompileError(context
-            .get_shader_info_log(&shader)
-            .unwrap_or_else(|| "Failed to `get_shader_info_log`".into())));
+        return Err(ShaderError::CompileError(
+            context
+                .get_shader_info_log(&shader)
+                .unwrap_or_else(|| "Failed to `get_shader_info_log`".into()),
+        ));
     }
 
     Ok(shader)

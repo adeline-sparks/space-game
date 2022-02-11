@@ -1,10 +1,10 @@
 use glam::{Vec2, Vec3};
 use js_sys::{Uint16Array, Uint8Array};
+use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlBuffer, WebGlVertexArrayObject};
-use anyhow::anyhow;
 
 use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
-use crate::mesh::{Attribute, AttributeVec, Mesh, PrimitiveType};
+use crate::mesh::{Attribute, AttributeVec, Mesh, MeshError, PrimitiveType};
 
 pub struct Vao {
     gl: WebGl2RenderingContext,
@@ -15,18 +15,28 @@ pub struct Vao {
     index_count: i32,
 }
 
+#[derive(Error, Debug)]
+pub enum VaoError {
+    #[error("Failed to create_vertex_array")]
+    CreateVertexArrayFailed,
+    #[error("Failed to create_buffer")]
+    CreateBufferFailed,
+    #[error(transparent)]
+    MeshError(#[from] MeshError),
+}
+
 impl Vao {
     pub fn build(
         context: &Context,
         attributes: &[Attribute],
         mesh: &Mesh,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, VaoError> {
         let vert_count = mesh.vert_count()?;
 
         let gl = &context.gl;
         let vao = gl
             .create_vertex_array()
-            .ok_or_else(|| anyhow!("Failed to create_vertex_array"))?;
+            .ok_or(VaoError::CreateVertexArrayFailed)?;
         gl.bind_vertex_array(Some(&vao));
 
         let active_attributes = attributes
@@ -39,9 +49,7 @@ impl Vao {
             .map(|&(_, a)| a.type_.byte_count())
             .sum();
 
-        let vert_buffer = gl
-            .create_buffer()
-            .ok_or_else(|| anyhow!("Failed to create vertex buffer"))?;
+        let vert_buffer = gl.create_buffer().ok_or(VaoError::CreateBufferFailed)?;
         gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vert_buffer));
 
         let mut vert_buffer_data = vec![0u8; stride * vert_count];
@@ -72,9 +80,7 @@ impl Vao {
         );
 
         let index_buffer = if let Some(indices) = &mesh.indices {
-            let buf = gl
-                .create_buffer()
-                .ok_or_else(|| anyhow!("Failed to create index buffer"))?;
+            let buf = gl.create_buffer().ok_or(VaoError::CreateBufferFailed)?;
             gl.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(&buf));
             gl.buffer_data_with_array_buffer_view(
                 WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,

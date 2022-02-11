@@ -28,7 +28,8 @@ impl Texture {
             WebGl2RenderingContext::RGBA,
             WebGl2RenderingContext::UNSIGNED_BYTE,
             &image,
-        ).map_err(DomError::from)?;
+        )
+        .map_err(DomError::from)?;
         gl.tex_parameteri(
             WebGl2RenderingContext::TEXTURE_2D,
             WebGl2RenderingContext::TEXTURE_MIN_FILTER,

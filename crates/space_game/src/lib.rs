@@ -2,6 +2,7 @@
 use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
+use futures::FutureExt;
 use gl::{Context, Shader, Texture, Vao};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
 use log::info;
@@ -14,14 +15,17 @@ pub mod mesh;
 pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
 
-use crate::{mesh::AttributeType, dom::DomError};
+use crate::dom::DomError;
+use crate::mesh::AttributeType;
 
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
-    spawn(main_render());
-    spawn(main_net());
+
+    use anyhow::Context;
+    spawn(main_render().map(|r| r.context("main_render")));
+    spawn(main_net().map(|r| r.context("main_net")));
 }
 
 struct Sphere(Vec3, f32);
@@ -40,13 +44,21 @@ impl<A: SignedDistanceFunction, B: SignedDistanceFunction> SignedDistanceFunctio
     fn value(&self, pos: Vec3) -> f32 {
         let a = self.0.value(pos);
         let b = self.1.value(pos);
-        if a < b { a } else { b }
+        if a < b {
+            a
+        } else {
+            b
+        }
     }
 
     fn grad(&self, pos: Vec3) -> Vec3 {
         let a = self.0.value(pos);
         let b = self.1.value(pos);
-        if a < b { self.0.grad(pos) } else { self.1.grad(pos) }        
+        if a < b {
+            self.0.grad(pos)
+        } else {
+            self.1.grad(pos)
+        }
     }
 }
 

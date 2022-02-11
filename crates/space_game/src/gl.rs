@@ -20,16 +20,20 @@ pub struct Context {
 }
 
 #[derive(Error, Debug)]
-#[error("Failed to get WebGl2RenderingContext")]
-pub struct ContextError;
+pub enum ContextError {
+    #[error("Failed to get WebGl2RenderingContext")]
+    GetContextFailed,
+    #[error(transparent)]
+    DomError(#[from] DomError),
+}
 
 impl Context {
-    pub fn from_canvas(element_id: &str) -> anyhow::Result<Self> {
+    pub fn from_canvas(element_id: &str) -> Result<Self, ContextError> {
         let canvas = dom::get_canvas(element_id)?;
         let gl = canvas
             .get_context("webgl2")
             .map_err(DomError::from)?
-            .ok_or(ContextError)?
+            .ok_or(ContextError::GetContextFailed)?
             .unchecked_into::<WebGl2RenderingContext>();
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.enable(WebGl2RenderingContext::CULL_FACE);
@@ -41,7 +45,9 @@ impl Context {
     }
 
     pub fn clear(&self) {
-        self.gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT);
+        self.gl.clear(
+            WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
+        );
     }
 
     pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], vao: &Vao) {

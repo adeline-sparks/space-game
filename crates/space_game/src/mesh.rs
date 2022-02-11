@@ -1,4 +1,4 @@
-use std::{borrow::Cow};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
@@ -49,11 +49,11 @@ pub enum MeshError {
     IndexOutOfBounds(usize, u16, u16),
     #[error("Two or more attributes have different lengths: `{first_name}` ({first_len}) and `{second_name}` ({second_len})")]
     AttributeLengthMismatch {
-        first_name: AttributeName, 
+        first_name: AttributeName,
         first_len: usize,
         second_name: AttributeName,
         second_len: usize,
-    }
+    },
 }
 
 impl Mesh {
@@ -71,7 +71,11 @@ impl Mesh {
             Some(v) => v,
         };
 
-        if let Some((name, vec)) = self.attributes.iter().find(|(_, vec)| vec.len() != first_vec.len()) {
+        if let Some((name, vec)) = self
+            .attributes
+            .iter()
+            .find(|(_, vec)| vec.len() != first_vec.len())
+        {
             return Err(MeshError::AttributeLengthMismatch {
                 first_name: first_name.clone(),
                 first_len: first_vec.len(),
@@ -86,7 +90,7 @@ impl Mesh {
     pub fn index_count(&self) -> Result<usize, MeshError> {
         match &self.indices {
             Some(indices) => Ok(indices.len()),
-            None => self.vert_count()
+            None => self.vert_count(),
         }
     }
 
@@ -134,9 +138,15 @@ impl Mesh {
         }
 
         if let Some(indices) = &self.indices {
-            let max: u16 = (index_count - 1).try_into()
+            let max: u16 = (index_count - 1)
+                .try_into()
                 .map_err(|_| MeshError::TooManyIndices(index_count))?;
-            if let Some((i, val)) = indices.iter().cloned().enumerate().find(|&(_, val)| val > max) {
+            if let Some((i, val)) = indices
+                .iter()
+                .cloned()
+                .enumerate()
+                .find(|&(_, val)| val > max)
+            {
                 return Err(MeshError::IndexOutOfBounds(i, val, max));
             }
         }
