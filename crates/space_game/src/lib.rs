@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use futures::FutureExt;
-use gl::{Context, Shader, Texture, Vao};
+use gl::{Context, Shader, Texture, Vao, Sampler2D};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
@@ -67,7 +67,8 @@ async fn main_render() -> anyhow::Result<()> {
     let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
 
-    let texture = Texture::load(&context, "ground_0010_base_color_2k.jpg").await?;
+    let color_texture = Texture::load(&context, "ground_0010_base_color_2k.jpg").await?;
+    let normal_texture = Texture::load(&context, "ground_0010_normal_2k.jpg").await?;
 
     let attributes = &[
         Attribute {
@@ -126,6 +127,7 @@ async fn main_render() -> anyhow::Result<()> {
         precision highp float;
 
         uniform sampler2D tex_color;
+        uniform sampler2D tex_normal;
         uniform float tex_scale;
         uniform float tex_blend_sharpness;
 
@@ -134,15 +136,33 @@ async fn main_render() -> anyhow::Result<()> {
         out vec4 out_color;
         
         void main() {
-            vec3 scaled_world_pos = frag_world_pos * tex_scale;
-            mat3 sample_colors = mat3(
-                texture(tex_color, scaled_world_pos.yz).rgb,
-                texture(tex_color, scaled_world_pos.xz).rgb,
-                texture(tex_color, scaled_world_pos.xy).rgb
+            vec3 uv = frag_world_pos * tex_scale;
+            vec3 weights = pow(abs(frag_world_normal), vec3(tex_blend_sharpness));
+            weights /= (weights.x + weights.y + weights.z);
+
+            mat3 colors = mat3(
+                texture(tex_color, uv.yz).rgb,
+                texture(tex_color, uv.xz).rgb,
+                texture(tex_color, uv.xy).rgb
             );
-            vec3 sample_weights = pow(abs(frag_world_normal), vec3(tex_blend_sharpness));
-            sample_weights /= (sample_weights.x + sample_weights.y + sample_weights.z);
-            out_color.rgb = sample_colors * sample_weights;
+            vec3 color = colors * weights;
+
+            mat3 normals = mat3(
+                texture(tex_normal, uv.yz).rgb,
+                texture(tex_normal, uv.xz).rgb,
+                texture(tex_normal, uv.xy).rgb
+            );
+            normals[0].xy += frag_world_normal.zy;
+            normals[1].xy += frag_world_normal.xz;
+            normals[2].xy += frag_world_normal.xy;
+            normals[0].z = abs(normals[0].z) * frag_world_normal.x;
+            normals[1].z = abs(normals[1].z) * frag_world_normal.y;
+            normals[2].z = abs(normals[2].z) * frag_world_normal.z;
+            normals[0] = normals[0].zyx;
+            normals[1] = normals[1].xzy;
+            vec3 normal = normals * weights;
+
+            out_color.rgb = normal;
             out_color.a = 1.0;
         }
         "##,
@@ -152,11 +172,15 @@ async fn main_render() -> anyhow::Result<()> {
         shader.uniform_location::<glam::Mat4>("model_view_projection")?;
     let model_matrix_loc = shader.uniform_location::<glam::Mat4>("model_matrix")?;
     let normal_matrix_loc = shader.uniform_location::<glam::Mat4>("normal_matrix")?;
+    let tex_color = shader.uniform_location::<Sampler2D>("tex_color")?;
+    let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
 
     shader.set_uniform(&tex_scale_loc, 0.1);
     shader.set_uniform(&tex_blend_sharpness_loc, 2.0);
+    shader.set_uniform(&tex_color, Sampler2D(0));
+    shader.set_uniform(&tex_normal, Sampler2D(1));
 
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
@@ -199,7 +223,7 @@ async fn main_render() -> anyhow::Result<()> {
         shader.set_uniform(&model_view_projection_loc, model_view_projection);
         shader.set_uniform(&model_matrix_loc, model);
         shader.set_uniform(&normal_matrix_loc, model.inverse().transpose());
-        context.draw(&shader, &[Some(&texture)], &vao);
+        context.draw(&shader, &[Some(&color_texture), Some(&normal_texture)], &vao);
     }
 }
 
