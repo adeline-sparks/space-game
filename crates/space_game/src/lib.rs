@@ -24,8 +24,8 @@ pub fn start() {
     console_log::init().unwrap();
 
     use anyhow::Context;
-    spawn(main_render().map(|r| r.context("main_render")));
-    spawn(main_net().map(|r| r.context("main_net")));
+    spawn(main_render().map(|r| r.context("main_render failed")));
+    spawn(main_net().map(|r| r.context("main_net failed")));
 }
 
 struct Sphere(Vec3, f32);

@@ -97,7 +97,7 @@ pub fn spawn(fut: impl Future<Output = anyhow::Result<()>> + 'static) {
     let _ = future_to_promise(async move {
         fut.await
             .map(|()| JsValue::NULL)
-            .map_err(|err| JsValue::from(err.to_string()))
+            .map_err(|err| JsValue::from(format!("{:?}", err)))
     });
 }
 
