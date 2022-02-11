@@ -37,6 +37,7 @@ impl Context {
             .unchecked_into::<WebGl2RenderingContext>();
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.enable(WebGl2RenderingContext::CULL_FACE);
+        gl.enable(WebGl2RenderingContext::DEPTH_TEST);
         Ok(Context { gl, canvas })
     }
 
