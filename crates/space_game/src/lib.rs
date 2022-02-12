@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::f64::consts::PI;
 
-use dom::{key_consts, open_websocket, spawn, InputEventListener};
+use dom::{open_websocket, spawn, InputEventListener, Key};
 use futures::FutureExt;
 use gl::{Context, Sampler2D, Shader, Texture, Vao};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
@@ -208,17 +208,23 @@ async fn main_render() -> anyhow::Result<()> {
         view = DMat4::from_quat(quat) * view;
 
         let speed = PI / 4.0;
-        if input.is_key_down(&key_consts::ARROW_LEFT) {
+        if input.is_key_down(&Key::ch('q')) {
             view = DMat4::from_rotation_z(speed * dt) * view;
-        } else if input.is_key_down(&key_consts::ARROW_RIGHT) {
+        } else if input.is_key_down(&Key::ch('e')) {
             view = DMat4::from_rotation_z(-speed * dt) * view;
         }
 
         let speed = 50.0;
-        if input.is_key_down(&key_consts::ARROW_UP) {
+        if input.is_key_down(&Key::ch('w')) {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, speed * dt)) * view;
-        } else if input.is_key_down(&key_consts::ARROW_DOWN) {
+        } else if input.is_key_down(&Key::ch('s')) {
             view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
+        }
+
+        if input.is_key_down(&Key::ch('a')) {
+            view = DMat4::from_translation(DVec3::new(speed * dt, 0.0, 0.0)) * view;
+        } else if input.is_key_down(&Key::ch('d')) {
+            view = DMat4::from_translation(DVec3::new(-speed * dt, 0.0, 0.0)) * view;
         }
 
         let light_dir = DVec3::new((time / 2.0).cos(), 0.0, (time / 2.0).sin());

@@ -33,6 +33,12 @@ impl TryFrom<&KeyboardEvent> for Key {
     }
 }
 
+impl Key {
+    pub fn ch(ch: char) -> Key {
+        Key(Cow::Owned(ch.to_string()))
+    }
+}
+
 struct State {
     keys: HashSet<Key>,
     mouse_pos: IVec2,
