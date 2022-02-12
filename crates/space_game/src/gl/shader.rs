@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use thiserror::Error;
-use wasm_bindgen::JsValue;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 use crate::dom::DomError;
@@ -28,6 +27,8 @@ pub enum ShaderError {
     AttributeTypeError(AttributeName, u32, u32),
     #[error("Shader expects unknown attribute `{0}`")]
     UnknownAttribute(AttributeName),
+    #[error("Shader does not have uniform `{0}`")]
+    MissingUniform(String),
     #[error(transparent)]
     DomError(#[from] DomError),
 }
@@ -95,15 +96,17 @@ impl Shader {
         Ok(Shader { gl, program })
     }
 
-    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, DomError> {
-        let location = self
-            .gl
-            .get_uniform_location(&self.program, name)
-            .ok_or(JsValue::from("Failed to `get_uniform_location`"))?;
-        Ok(Uniform {
+    pub fn try_uniform_location<T: UniformValue>(&self, name: &str) -> Option<Uniform<T>> {
+        let location = self.gl.get_uniform_location(&self.program, name)?;
+        Some(Uniform {
             location,
             phantom: PhantomData,
         })
+    }
+
+    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, ShaderError> {
+        self.try_uniform_location(name)
+            .ok_or_else(|| ShaderError::MissingUniform(name.into()))
     }
 
     pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {

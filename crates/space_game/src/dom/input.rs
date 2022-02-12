@@ -7,7 +7,7 @@ use glam::IVec2;
 
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{Element, Event, KeyboardEvent, MouseEvent, WheelEvent, AddEventListenerOptions};
+use web_sys::{AddEventListenerOptions, Element, Event, KeyboardEvent, MouseEvent, WheelEvent};
 
 use super::{document, get_canvas, DomError};
 
@@ -121,9 +121,10 @@ impl InputEventListener {
         for &type_ in EVENT_TYPES {
             let passive = type_ == "wheel";
             target.add_event_listener_with_callback_and_add_event_listener_options(
-                type_, 
+                type_,
                 listener.as_ref().unchecked_ref(),
-                AddEventListenerOptions::new().passive(passive))?;
+                AddEventListenerOptions::new().passive(passive),
+            )?;
         }
 
         Ok(InputEventListener {

@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 
 use dom::{key_consts, open_websocket, spawn, InputEventListener};
 use futures::FutureExt;
-use gl::{Context, Shader, Texture, Vao, Sampler2D};
+use gl::{Context, Sampler2D, Shader, Texture, Vao};
 use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
@@ -84,7 +84,7 @@ async fn main_render() -> anyhow::Result<()> {
     let mesh = marching_cubes(
         &(
             Sphere(Vec3::new(0.0, 0.0, 0.0), 50.0),
-            Sphere(Vec3::new(50.0, 0.0, 0.0), 30.0),
+            Sphere(Vec3::new(50.0, 10.0, 0.0), 30.0),
         ),
         (
             Vec3::new(-128.0, -128.0, -128.0),
@@ -142,9 +142,9 @@ async fn main_render() -> anyhow::Result<()> {
             weights /= (weights.x + weights.y + weights.z);
 
             mat3 colors = mat3(
-                texture(tex_color, uv.yz).rgb,
-                texture(tex_color, uv.xz).rgb,
-                texture(tex_color, uv.xy).rgb
+                pow(texture(tex_color, uv.yz).rgb, vec3(2.2)),
+                pow(texture(tex_color, uv.xz).rgb, vec3(2.2)),
+                pow(texture(tex_color, uv.xy).rgb, vec3(2.2))
             );
             vec3 color = colors * weights;
 
@@ -162,9 +162,11 @@ async fn main_render() -> anyhow::Result<()> {
             normals[2].z = abs(normals[2].z) * frag_world_normal.z;
             normals[0] = normals[0].zyx;
             normals[1] = normals[1].xzy;
-            vec3 normal = normals * weights;
+            vec3 normal = normalize(normals * weights);
 
-            out_color.rgb = dot(light_dir, -normal) + color;
+            out_color.rgb = .3 * dot(light_dir, normal) + color;
+            //out_color.rgb = normal / 2.0 + 0.5;
+            out_color.rgb = pow(out_color.rgb, vec3(1.0/2.2));
             out_color.a = 1.0;
         }
         "##,
@@ -178,10 +180,10 @@ async fn main_render() -> anyhow::Result<()> {
     let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
-    let light_dir_loc = shader.uniform_location::<glam::Vec3>("light_dir")?;
+    let light_dir_loc = shader.try_uniform_location::<glam::Vec3>("light_dir");
 
     shader.set_uniform(&tex_scale_loc, 0.1);
-    shader.set_uniform(&tex_blend_sharpness_loc, 2.0);
+    shader.set_uniform(&tex_blend_sharpness_loc, 4.0);
     shader.set_uniform(&tex_color, Sampler2D(0));
     shader.set_uniform(&tex_normal, Sampler2D(1));
 
@@ -228,8 +230,14 @@ async fn main_render() -> anyhow::Result<()> {
         shader.set_uniform(&model_view_projection_loc, model_view_projection);
         shader.set_uniform(&model_matrix_loc, model);
         shader.set_uniform(&normal_matrix_loc, model.inverse().transpose());
-        shader.set_uniform(&light_dir_loc, light_dir.as_vec3());
-        context.draw(&shader, &[Some(&color_texture), Some(&normal_texture)], &vao);
+        if let Some(loc) = &light_dir_loc {
+            shader.set_uniform(loc, light_dir.as_vec3());
+        }
+        context.draw(
+            &shader,
+            &[Some(&color_texture), Some(&normal_texture)],
+            &vao,
+        );
     }
 }
 
