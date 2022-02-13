@@ -4,9 +4,9 @@ use std::f64::consts::PI;
 use dom::{open_websocket, spawn, InputEventListener, Key};
 use futures::FutureExt;
 use gl::{Context, Sampler2D, Shader, Texture, Vao};
-use glam::{DMat4, DQuat, DVec3, IVec3, Mat4, Vec3};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
+use nalgebra::{Vector3, Matrix4, Point3, Isometry3, UnitQuaternion, Translation3};
 use wasm_bindgen::prelude::*;
 
 pub mod dom;
@@ -28,20 +28,20 @@ pub fn start() {
     spawn(main_net().map(|r| r.context("main_net failed")));
 }
 
-struct Sphere(Vec3, f32);
+struct Sphere(Vector3<f64>, f64);
 
 impl SignedDistanceFunction for Sphere {
-    fn value(&self, pos: Vec3) -> f32 {
-        (pos - self.0).length() - self.1
+    fn value(&self, pos: Vector3<f64>) -> f64 {
+        (pos - self.0).norm() - self.1
     }
 
-    fn grad(&self, pos: Vec3) -> Vec3 {
+    fn grad(&self, pos: Vector3<f64>) -> Vector3<f64> {
         2.0 * (pos - self.0)
     }
 }
 
 impl<A: SignedDistanceFunction, B: SignedDistanceFunction> SignedDistanceFunction for (A, B) {
-    fn value(&self, pos: Vec3) -> f32 {
+    fn value(&self, pos: Vector3<f64>) -> f64 {
         let a = self.0.value(pos);
         let b = self.1.value(pos);
         if a < b {
@@ -51,7 +51,7 @@ impl<A: SignedDistanceFunction, B: SignedDistanceFunction> SignedDistanceFunctio
         }
     }
 
-    fn grad(&self, pos: Vec3) -> Vec3 {
+    fn grad(&self, pos: Vector3<f64>) -> Vector3<f64> {
         let a = self.0.value(pos);
         let b = self.1.value(pos);
         if a < b {
@@ -83,14 +83,14 @@ async fn main_render() -> anyhow::Result<()> {
 
     let mesh = marching_cubes(
         &(
-            Sphere(Vec3::new(0.0, 0.0, 0.0), 50.0),
-            Sphere(Vec3::new(50.0, 10.0, 0.0), 30.0),
+            Sphere(Vector3::new(0.0, 0.0, 0.0), 50.0),
+            Sphere(Vector3::new(50.0, 10.0, 0.0), 30.0),
         ),
         (
-            Vec3::new(-128.0, -128.0, -128.0),
-            Vec3::new(128.0, 128.0, 128.0),
+            Vector3::new(-128.0, -128.0, -128.0),
+            Vector3::new(128.0, 128.0, 128.0),
         ),
-        IVec3::new(32, 32, 32),
+        Vector3::new(32, 32, 32),
     );
 
     let vao = Vao::build(&context, attributes, &mesh)?;
@@ -173,14 +173,14 @@ async fn main_render() -> anyhow::Result<()> {
     )?;
 
     let model_view_projection_loc =
-        shader.uniform_location::<glam::Mat4>("model_view_projection")?;
-    let model_matrix_loc = shader.uniform_location::<glam::Mat4>("model_matrix")?;
-    let normal_matrix_loc = shader.uniform_location::<glam::Mat4>("normal_matrix")?;
+        shader.uniform_location::<Matrix4<f32>>("model_view_projection")?;
+    let model_matrix_loc = shader.uniform_location::<Matrix4<f32>>("model_matrix")?;
+    let normal_matrix_loc = shader.uniform_location::<Matrix4<f32>>("normal_matrix")?;
     let tex_color = shader.uniform_location::<Sampler2D>("tex_color")?;
     let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
-    let light_dir_loc = shader.try_uniform_location::<glam::Vec3>("light_dir");
+    let light_dir_loc = shader.try_uniform_location::<Vector3<f32>>("light_dir");
 
     shader.set_uniform(&tex_scale_loc, 0.1);
     shader.set_uniform(&tex_blend_sharpness_loc, 4.0);
@@ -188,10 +188,10 @@ async fn main_render() -> anyhow::Result<()> {
     shader.set_uniform(&tex_normal, Sampler2D(1));
 
     let canvas = context.canvas();
-    let aspect_ratio = (canvas.width() as f32) / (canvas.height() as f32);
-    let projection = Mat4::perspective_rh_gl((75.0f32).to_radians(), aspect_ratio, 1.0, 1000.0);
+    let aspect_ratio = (canvas.width() as f64) / (canvas.height() as f64);
+    let projection = Matrix4::new_perspective((75.0f64).to_radians(), aspect_ratio, 1.0, 1000.0);
 
-    let mut view = DMat4::look_at_rh(DVec3::new(0.0, 0.0, 100.0), DVec3::ZERO, DVec3::Y);
+    let mut view = Isometry3::<f64>::look_at_rh(&Point3::new(0.0, 0.0, 100.0), &Point3::origin(), &Vector3::y_axis());
     let mut prev_time = animation_frame_seconds().await?;
     let mut prev_mouse_pos = input.mouse_pos();
     loop {
@@ -200,44 +200,46 @@ async fn main_render() -> anyhow::Result<()> {
         prev_time = time;
 
         let mouse_pos = input.mouse_pos();
-        let mouse_delta = (mouse_pos - prev_mouse_pos).as_dvec2() * dt;
+        let mouse_delta = (mouse_pos - prev_mouse_pos).cast() * dt;
         prev_mouse_pos = mouse_pos;
 
-        let quat =
-            DQuat::from_scaled_axis(DVec3::new(-mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
-        view = DMat4::from_quat(quat) * view;
+        let mut rot =
+            UnitQuaternion::from_scaled_axis(Vector3::new(mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
 
         let speed = PI / 4.0;
         if input.is_key_down(&Key::ch('q')) {
-            view = DMat4::from_rotation_z(speed * dt) * view;
+            rot *= UnitQuaternion::from_axis_angle(&Vector3::z_axis(), speed * dt);
         } else if input.is_key_down(&Key::ch('e')) {
-            view = DMat4::from_rotation_z(-speed * dt) * view;
+            rot *= UnitQuaternion::from_axis_angle(&Vector3::z_axis(), -speed * dt);
         }
+        view.append_rotation_mut(&rot);
 
+        let mut translate = Translation3::<f64>::new(0.0, 0.0, 0.0);
         let speed = 50.0;
         if input.is_key_down(&Key::ch('w')) {
-            view = DMat4::from_translation(DVec3::new(0.0, 0.0, speed * dt)) * view;
+            translate.z += speed * dt;
         } else if input.is_key_down(&Key::ch('s')) {
-            view = DMat4::from_translation(DVec3::new(0.0, 0.0, -speed * dt)) * view;
+            translate.z -= speed * dt;
         }
 
         if input.is_key_down(&Key::ch('a')) {
-            view = DMat4::from_translation(DVec3::new(speed * dt, 0.0, 0.0)) * view;
+            translate.x += speed * dt;
         } else if input.is_key_down(&Key::ch('d')) {
-            view = DMat4::from_translation(DVec3::new(-speed * dt, 0.0, 0.0)) * view;
+            translate.x -= speed * dt;
         }
+        view.append_translation_mut(&translate);
 
-        let light_dir = DVec3::new((time / 2.0).cos(), 0.0, (time / 2.0).sin());
+        let light_dir = Vector3::new((time / 2.0).cos(), 0.0, (time / 2.0).sin());
 
         context.clear();
-        let model = Mat4::IDENTITY;
-        let model_view = view.as_mat4() * model;
+        let model = Matrix4::identity();
+        let model_view = view.to_matrix() * model;
         let model_view_projection = projection * model_view;
-        shader.set_uniform(&model_view_projection_loc, model_view_projection);
-        shader.set_uniform(&model_matrix_loc, model);
-        shader.set_uniform(&normal_matrix_loc, model.inverse().transpose());
+        shader.set_uniform(&model_view_projection_loc, model_view_projection.cast());
+        shader.set_uniform(&model_matrix_loc, model.cast());
+        shader.set_uniform(&normal_matrix_loc, model.cast());
         if let Some(loc) = &light_dir_loc {
-            shader.set_uniform(loc, light_dir.as_vec3());
+            shader.set_uniform(loc, light_dir.cast());
         }
         context.draw(
             &shader,

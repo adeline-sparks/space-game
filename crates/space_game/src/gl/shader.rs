@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use nalgebra::{Vector2, Vector3, Vector4, Matrix3, Matrix4};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
@@ -166,33 +167,33 @@ impl UniformValue for f32 {
     }
 }
 
-impl UniformValue for glam::Vec2 {
+impl UniformValue for Vector2<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         gl.uniform2f(Some(&loc), self.x, self.y);
     }
 }
 
-impl UniformValue for glam::Vec3 {
+impl UniformValue for Vector3<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         gl.uniform3f(Some(&loc), self.x, self.y, self.z);
     }
 }
 
-impl UniformValue for glam::Vec4 {
+impl UniformValue for Vector4<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
         gl.uniform4f(Some(&loc), self.x, self.y, self.z, self.w);
     }
 }
 
-impl UniformValue for glam::Mat3 {
+impl UniformValue for Matrix3<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_ref());
+        gl.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_slice());
     }
 }
 
-impl UniformValue for glam::Mat4 {
+impl UniformValue for Matrix4<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_ref());
+        gl.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_slice());
     }
 }
 

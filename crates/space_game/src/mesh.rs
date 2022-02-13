@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use glam::{Vec2, Vec3};
+use nalgebra::{Vector3, Vector2};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,8 +17,8 @@ pub const NORMAL: AttributeName = Cow::Borrowed("vert_normal");
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AttributeVec {
-    Vec2(Vec<Vec2>),
-    Vec3(Vec<Vec3>),
+    Vec2(Vec<Vector2<f32>>),
+    Vec3(Vec<Vector3<f32>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

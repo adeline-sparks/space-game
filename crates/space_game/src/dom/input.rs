@@ -3,8 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use glam::IVec2;
-
+use nalgebra::Vector2;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{AddEventListenerOptions, Element, Event, KeyboardEvent, MouseEvent, WheelEvent};
@@ -41,7 +40,7 @@ impl Key {
 
 struct State {
     keys: HashSet<Key>,
-    mouse_pos: IVec2,
+    mouse_pos: Vector2<i32>,
     wheel_pos: f64,
 }
 
@@ -49,7 +48,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             keys: HashSet::new(),
-            mouse_pos: IVec2::new(0, 0),
+            mouse_pos: Vector2::zeros(),
             wheel_pos: 0.0,
         }
     }
@@ -58,7 +57,7 @@ impl Default for State {
 impl State {
     fn apply_event(&mut self, ev: &Event) {
         if let Some(ev) = ev.dyn_ref::<MouseEvent>() {
-            self.mouse_pos += IVec2::new(ev.movement_x(), -ev.movement_y());
+            self.mouse_pos += Vector2::new(ev.movement_x(), ev.movement_y());
 
             if let Some(ev) = ev.dyn_ref::<WheelEvent>() {
                 self.wheel_pos += ev.delta_y();
@@ -144,7 +143,7 @@ impl InputEventListener {
         self.state.borrow().keys.contains(key)
     }
 
-    pub fn mouse_pos(&self) -> IVec2 {
+    pub fn mouse_pos(&self) -> Vector2<i32> {
         self.state.borrow().mouse_pos
     }
 
