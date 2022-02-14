@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 slotmap = "1"
+nalgebra = { version = "0.30.1", features = ["bytemuck"] }
