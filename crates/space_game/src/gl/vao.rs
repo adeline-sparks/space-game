@@ -135,7 +135,8 @@ fn pack_attribute_vec(stride: usize, offset: usize, attr_vec: &AttributeVec, out
         AttributeVec::Vec3(vecs) => {
             for (i, vec) in vecs.iter().enumerate() {
                 let pos = (i * stride) + offset;
-                out[pos..pos + 12].copy_from_slice(bytemuck::cast_ref::<Vector3<f32>, [u8; 12]>(vec));
+                out[pos..pos + 12]
+                    .copy_from_slice(bytemuck::cast_ref::<Vector3<f32>, [u8; 12]>(vec));
             }
         }
     }

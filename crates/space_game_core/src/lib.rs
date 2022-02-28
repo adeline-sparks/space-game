@@ -1,4 +1,5 @@
-mod orbit;
+pub mod orbit;
+pub mod world;
 
 #[cfg(test)]
 mod tests {

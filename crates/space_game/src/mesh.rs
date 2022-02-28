@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use nalgebra::{Vector3, Vector2};
+use nalgebra::{Vector2, Vector3};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]

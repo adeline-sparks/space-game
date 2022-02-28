@@ -6,7 +6,7 @@ use futures::FutureExt;
 use gl::{Context, Sampler2D, Shader, Texture, Vao};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
-use nalgebra::{Vector3, Matrix4, Point3, Isometry3, UnitQuaternion, Translation3};
+use nalgebra::{Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector3};
 use wasm_bindgen::prelude::*;
 
 pub mod dom;
@@ -191,7 +191,11 @@ async fn main_render() -> anyhow::Result<()> {
     let aspect_ratio = (canvas.width() as f64) / (canvas.height() as f64);
     let projection = Matrix4::new_perspective((75.0f64).to_radians(), aspect_ratio, 1.0, 1000.0);
 
-    let mut view = Isometry3::<f64>::look_at_rh(&Point3::new(0.0, 0.0, 100.0), &Point3::origin(), &Vector3::y_axis());
+    let mut view = Isometry3::<f64>::look_at_rh(
+        &Point3::new(0.0, 0.0, 100.0),
+        &Point3::origin(),
+        &Vector3::y_axis(),
+    );
     let mut prev_time = animation_frame_seconds().await?;
     let mut prev_mouse_pos = input.mouse_pos();
     loop {
@@ -203,8 +207,11 @@ async fn main_render() -> anyhow::Result<()> {
         let mouse_delta = (mouse_pos - prev_mouse_pos).cast() * dt;
         prev_mouse_pos = mouse_pos;
 
-        let mut rot =
-            UnitQuaternion::from_scaled_axis(Vector3::new(mouse_delta.y / 20.0, mouse_delta.x / 20.0, 0.0));
+        let mut rot = UnitQuaternion::from_scaled_axis(Vector3::new(
+            mouse_delta.y / 20.0,
+            mouse_delta.x / 20.0,
+            0.0,
+        ));
 
         let speed = PI / 4.0;
         if input.is_key_down(&Key::ch('q')) {

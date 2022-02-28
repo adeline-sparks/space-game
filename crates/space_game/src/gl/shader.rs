@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use nalgebra::{Vector2, Vector3, Vector4, Matrix3, Matrix4};
+use nalgebra::{Matrix3, Matrix4, Vector2, Vector3, Vector4};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 

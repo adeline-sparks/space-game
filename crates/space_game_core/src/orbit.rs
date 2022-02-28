@@ -1,6 +1,6 @@
-use std::f64::consts::{TAU, PI};
+use std::f64::consts::{PI, TAU};
 
-use nalgebra::{Vector3, RealField};
+use nalgebra::Vector3;
 
 #[derive(Clone, Debug)]
 pub struct OrbitalElements {
@@ -38,14 +38,14 @@ impl OrbitalElements {
         let node = node_vec.magnitude();
 
         let position_mag = sv.position.magnitude();
-        if position_mag == 0.0 { 
-            todo!() 
+        if position_mag == 0.0 {
+            todo!()
         }
 
         let velocity_mag = sv.velocity.magnitude();
 
-        let eccentricity_vec = 
-            (velocity_mag * velocity_mag / grav - 1.0 / position_mag) * sv.position
+        let eccentricity_vec = (velocity_mag * velocity_mag / grav - 1.0 / position_mag)
+            * sv.position
             - ((sv.position.dot(&sv.velocity) / grav) * sv.velocity);
         let eccentricity = eccentricity_vec.magnitude();
         if (1.0 - eccentricity).abs() <= 1e-6 {
@@ -78,9 +78,7 @@ impl OrbitalElements {
         let circular = eccentricity <= 1e-11;
 
         let argument_of_periapsis = match (circular, equatorial) {
-            (true, _ ) => {
-                0.0
-            }
+            (true, _) => 0.0,
             (false, false) => {
                 let result = (node_vec.dot(&eccentricity_vec) / (node * eccentricity)).acos();
                 if eccentricity_vec.z < 0.0 {
@@ -101,7 +99,8 @@ impl OrbitalElements {
 
         let true_anomaly = match (circular, equatorial) {
             (false, _) => {
-                let result = (eccentricity_vec.dot(&sv.position) / (eccentricity * position_mag)).acos();
+                let result =
+                    (eccentricity_vec.dot(&sv.position) / (eccentricity * position_mag)).acos();
                 if sv.position.dot(&sv.velocity) < 0.0 {
                     TAU - result
                 } else {
@@ -130,7 +129,8 @@ impl OrbitalElements {
         let mean_anomaly = if eccentricity < (1.0 - tol) {
             let cos_ta = true_anomaly.cos();
             let ecc_cos_ta = eccentricity * cos_ta;
-            let sin_ea = ((1.0 - eccentricity * eccentricity).sqrt() * true_anomaly.sin()) / (1.0 + ecc_cos_ta);
+            let sin_ea = ((1.0 - eccentricity * eccentricity).sqrt() * true_anomaly.sin())
+                / (1.0 + ecc_cos_ta);
             let cos_ea = (eccentricity + cos_ta) / (1.0 + ecc_cos_ta);
             let eccentric_anomaly = sin_ea.atan2(cos_ea);
             let result = eccentric_anomaly - eccentricity * eccentric_anomaly.sin();
@@ -140,24 +140,25 @@ impl OrbitalElements {
                 result
             }
         } else if eccentricity > (1.0 + tol) {
-            let tanh_ha2 = (true_anomaly / 2.0).tan() * ((eccentricity - 1.0) / (eccentricity + 1.0)).sqrt();
+            let tanh_ha2 =
+                (true_anomaly / 2.0).tan() * ((eccentricity - 1.0) / (eccentricity + 1.0)).sqrt();
             let hyperbolic_anomaly = 2.0 * tanh_ha2.atanh();
             eccentricity * hyperbolic_anomaly.sinh() - hyperbolic_anomaly
         } else {
             todo!();
         };
-       
-        OrbitalElements { 
-            semi_major_axis, 
-            eccentricity, 
-            inclination, 
-            longitude_of_ascending_node, 
-            argument_of_periapsis, 
-            mean_anomaly, 
+
+        OrbitalElements {
+            semi_major_axis,
+            eccentricity,
+            inclination,
+            longitude_of_ascending_node,
+            argument_of_periapsis,
+            mean_anomaly,
         }
     }
 
-    pub fn true_anomaly(&self) -> f64 { 
+    pub fn true_anomaly(&self) -> f64 {
         if self.eccentricity <= 1.0 {
             let mut e2 = self.mean_anomaly + self.eccentricity * self.mean_anomaly.sin();
             let result = loop {
@@ -171,12 +172,8 @@ impl OrbitalElements {
                 }
                 e2 = e1;
             };
-            let eccentric_anomaly = if result < 0.0 {
-                TAU + result
-            } else {
-                result
-            };
-        
+            let eccentric_anomaly = if result < 0.0 { TAU + result } else { result };
+
             let result = if (eccentric_anomaly - PI).abs() >= 1e-8 {
                 let temp = 1.0 - self.eccentricity;
                 if temp.abs() < 1e-30 {
@@ -186,7 +183,7 @@ impl OrbitalElements {
                 if temp2 < 0.0 {
                     todo!();
                 }
-                2.0 * (temp2.sqrt()*(self.eccentricity / 2.0).tan()).atan()
+                2.0 * (temp2.sqrt() * (self.eccentricity / 2.0).tan()).atan()
             } else {
                 eccentric_anomaly
             };
@@ -248,17 +245,17 @@ impl OrbitalElements {
         let y = rad * (cos_per_anom * sin_long + cos_inc * sin_per_anom * cos_long);
         let z = rad * sin_per_anom * sin_inc;
 
-        let vx = 
+        let vx =
             sqrt_grav_p * cos_anom_plus_e * (-sin_per * cos_long - cos_inc * sin_long * cos_per)
-            - sqrt_grav_p * sin_anom * (cos_per * cos_long - cos_inc * sin_long * sin_per);
-        let vy = 
+                - sqrt_grav_p * sin_anom * (cos_per * cos_long - cos_inc * sin_long * sin_per);
+        let vy =
             sqrt_grav_p * cos_anom_plus_e * (-sin_per * sin_long + cos_inc * cos_long * cos_per)
-            - sqrt_grav_p * sin_anom * (cos_per * cos_long + cos_inc * sin_long * sin_per);
+                - sqrt_grav_p * sin_anom * (cos_per * cos_long + cos_inc * sin_long * sin_per);
         let vz = sqrt_grav_p * (cos_anom_plus_e * sin_inc * cos_per - sin_anom * sin_inc * sin_per);
 
-        StateVector { 
-            position: Vector3::new(x, y, z), 
-            velocity: Vector3::new(vx, vy, vz) 
+        StateVector {
+            position: Vector3::new(x, y, z),
+            velocity: Vector3::new(vx, vy, vz),
         }
     }
 }

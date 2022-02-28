@@ -16,7 +16,7 @@ pub fn marching_cubes(
     sample_count: Vector3<i32>,
 ) -> Mesh {
     let cell_size = (sample_volume.1 - sample_volume.0).component_div(&sample_count.cast());
-    let ipos_to_pos = |ipos: Vector3<i32>| { sample_volume.0 + ipos.cast().component_mul(&cell_size) };
+    let ipos_to_pos = |ipos: Vector3<i32>| sample_volume.0 + ipos.cast().component_mul(&cell_size);
 
     let mut pos_vec = Vec::new();
     let mut index_vec = Vec::<u16>::new();
@@ -66,8 +66,10 @@ pub fn marching_cubes(
     mesh.indices = Some(index_vec);
     mesh.attributes
         .insert(POSITION, AttributeVec::Vec3(pos_vec));
-    mesh.attributes
-        .insert(NORMAL, AttributeVec::Vec3(normal_vec.into_iter().map(|v| v.cast()).collect()));
+    mesh.attributes.insert(
+        NORMAL,
+        AttributeVec::Vec3(normal_vec.into_iter().map(|v| v.cast()).collect()),
+    );
     assert_eq!(mesh.validate(), Ok(()));
     mesh
 }
