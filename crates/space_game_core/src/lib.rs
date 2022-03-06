@@ -1,5 +1,7 @@
 pub mod orbit;
-pub mod world;
+
+#[allow(unused)]
+pub mod ecs;
 
 #[cfg(test)]
 mod tests {
