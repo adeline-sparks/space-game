@@ -28,9 +28,15 @@ pub struct Context<'a> {
 
 impl Handler {
     pub fn new<E: Event, Args, F: HandlerFn<E, Args> + 'static>(f: F) -> Self {
+        let mut dependencies = Vec::new();
+        F::dependencies(&mut dependencies);
         Handler {
             event_id: F::event_id(),
-            dependencies: F::dependencies(),
+            dependencies: {
+                let mut result = Vec::new();
+                F::dependencies(&mut result);
+                result
+            },
             fn_box: Box::new(move |context| f.call(context)),
         }
     }
@@ -49,14 +55,14 @@ impl Handler {
 
 pub trait HandlerFn<E, Args> {
     fn event_id() -> TypeId;
-    fn dependencies() -> Vec<Dependency>;
+    fn dependencies(out: &mut Vec<Dependency>);
 
     fn call(&self, context: &Context) -> anyhow::Result<()>;
 }
 
 pub trait HandlerFnArg {
     type Builder: for<'c> HandlerFnArgBuilder<'c>;
-    fn dependencies() -> Vec<Dependency>;
+    fn dependencies(out: &mut Vec<Dependency>);
 }
 
 pub trait HandlerFnArgBuilder<'c> {
@@ -77,11 +83,9 @@ macro_rules! impl_handler_fn {
                 TypeId::of::<E>()
             }
 
-            fn dependencies() -> Vec<Dependency> {
-                #[allow(unused_mut)]
-                let mut result = Vec::new();
-                $(result.extend($Args::dependencies());)*
-                result
+            fn dependencies(out: &mut Vec<Dependency>) {
+                let _ = out;
+                $($Args::dependencies(out));*
             }
 
             fn call(&self, context: &Context) -> anyhow::Result<()> {

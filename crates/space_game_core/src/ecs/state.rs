@@ -49,8 +49,8 @@ pub struct Reader<'s, S: State>(Ref<'s, S>);
 
 impl<'s, S: State> HandlerFnArg for Reader<'s, S> {
     type Builder = ReaderBuilder<S>;
-    fn dependencies() -> Vec<Dependency> {
-        vec![Dependency::ReadState(TypeId::of::<S>())]
+    fn dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::ReadState(TypeId::of::<S>()));
     }
 }
 
@@ -76,8 +76,8 @@ pub struct DelayedReader<'s, S: State>(Ref<'s, S>);
 
 impl<'s, S: State> HandlerFnArg for DelayedReader<'s, S> {
     type Builder = DelayedReaderBuilder<S>;
-    fn dependencies() -> Vec<Dependency> {
-        vec![Dependency::ReadStateDelayed(TypeId::of::<S>())]
+    fn dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::ReadStateDelayed(TypeId::of::<S>()));
     }
 }
 
@@ -104,8 +104,8 @@ pub struct Writer<'s, S: State>(RefMut<'s, S>);
 impl<'s, S: State> HandlerFnArg for Writer<'s, S> {
     type Builder = WriterBuilder<S>;
 
-    fn dependencies() -> Vec<Dependency> {
-        vec![Dependency::WriteState(TypeId::of::<S>())]
+    fn dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::WriteState(TypeId::of::<S>()));
     }
 }
 

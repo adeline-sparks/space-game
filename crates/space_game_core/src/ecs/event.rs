@@ -50,9 +50,7 @@ impl<'e> EventWriter<'e> {
 impl<'e> HandlerFnArg for EventWriter<'e> {
     type Builder = EventWriterBuilder;
 
-    fn dependencies() -> Vec<Dependency> {
-        vec![]
-    }
+    fn dependencies(_out: &mut Vec<Dependency>) {}
 }
 
 pub struct EventWriterBuilder;

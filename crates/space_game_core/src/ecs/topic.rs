@@ -66,8 +66,8 @@ impl<'t, T: Topic> Publisher<'t, T> {
 impl<'t, T: Topic> HandlerFnArg for Publisher<'t, T> {
     type Builder = PublisherBuilder<T>;
 
-    fn dependencies() -> Vec<Dependency> {
-        vec![Dependency::PublishTopic(TypeId::of::<T>())]
+    fn dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::PublishTopic(TypeId::of::<T>()));
     }
 }
 
@@ -92,8 +92,8 @@ impl<'t, T: Topic> Subscriber<'t, T> {
 impl<'t, T: Topic> HandlerFnArg for Subscriber<'t, T> {
     type Builder = SubscriberBuilder<T>;
 
-    fn dependencies() -> Vec<Dependency> {
-        vec![Dependency::SubscribeTopic(TypeId::of::<T>())]
+    fn dependencies(out: &mut Vec<Dependency>) {
+        out.push(Dependency::SubscribeTopic(TypeId::of::<T>()));
     }
 }
 
