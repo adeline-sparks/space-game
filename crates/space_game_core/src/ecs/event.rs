@@ -1,8 +1,10 @@
-use std::{any::{Any, TypeId}, collections::VecDeque, cell::RefCell};
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 
-use super::{handler::HandlerFnArg, reactor::Dependency, state::StateContainer, topic::TopicContainer};
+use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Event: 'static { }
+pub trait Event: 'static {}
 
 pub struct AnyEvent(Box<dyn Any>);
 
@@ -37,20 +39,28 @@ impl EventQueue {
     }
 }
 
-pub struct Events<'e>(&'e EventQueue);
+pub struct EventWriter<'e>(&'e EventQueue);
 
-impl<'e> Events<'e> {
-    pub fn emit<E: Event>(&self, e: E) {
+impl<'e> EventWriter<'e> {
+    pub fn write<E: Event>(&self, e: E) {
         self.0.push(AnyEvent::new(e));
     }
 }
 
-impl<'e> HandlerFnArg<'e> for Events<'e> {
-    fn dependency() -> Option<Dependency> {
-        None
-    }
+impl<'e> HandlerFnArg for EventWriter<'e> {
+    type Builder = EventWriterBuilder;
 
-    fn build(_world: &'e StateContainer, events: &'e EventQueue, _topics: &'e TopicContainer) -> Self {
-        Self(events)
+    fn dependencies() -> Vec<Dependency> {
+        vec![]
+    }
+}
+
+pub struct EventWriterBuilder;
+
+impl<'c> HandlerFnArgBuilder<'c> for EventWriterBuilder {
+    type Arg = EventWriter<'c>;
+
+    fn build(context: &'c Context) -> EventWriter<'c> {
+        EventWriter(&context.queue)
     }
 }

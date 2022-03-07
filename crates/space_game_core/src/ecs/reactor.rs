@@ -1,6 +1,11 @@
-use std::{any::TypeId, collections::{HashMap, HashSet}, slice};
+use std::any::TypeId;
+use std::collections::{HashMap, HashSet};
+use std::slice;
 
-use super::{event::EventQueue, state::StateContainer, topic::TopicContainer, handler::{Handler, HandlerFn}, Event, AnyEvent};
+use super::event::{AnyEvent, Event, EventQueue};
+use super::handler::{Context, Dependency, Handler};
+use super::state::StateContainer;
+use super::topic::TopicContainer;
 
 pub struct Reactor {
     states: StateContainer,
@@ -8,21 +13,35 @@ pub struct Reactor {
 }
 
 impl Reactor {
-    pub fn new<'a>(states: StateContainer, all_handlers: impl IntoIterator<Item=(TypeId, Vec<Handler>)>) -> Self {
-        let mut handlers_map = HashMap::new();
-        
-        for (tid, handlers) in all_handlers {
+    pub fn new<'a>(states: StateContainer, handlers: Vec<Handler>) -> Self {
+        let mut handlers_map: HashMap<TypeId, Vec<Handler>> = HashMap::new();
+        for handler in handlers {
+            handlers_map
+                .entry(handler.event_id())
+                .or_default()
+                .push(handler);
+        }
+
+        for handlers in handlers_map.values_mut() {
             let all_deps = handlers
                 .iter()
-                .map(|h| h.dependencies)
+                .map(|h| h.dependencies())
                 .collect::<Vec<_>>();
             let order = Dependency::execution_order(&all_deps);
-            let mut handlers = handlers.into_iter().map(Some).collect::<Vec<_>>();
-            let handlers_ordered = order.iter().map(|&idx| handlers[idx].take().unwrap()).collect::<Vec<_>>();
-            assert!(handlers_map.insert(tid, handlers_ordered).is_none());
+
+            let mut handlers_temp = handlers.drain(..).map(Some).collect::<Vec<_>>();
+            handlers.extend(
+                order
+                    .iter()
+                    .map(|&idx| handlers_temp[idx].take().unwrap())
+                    .collect::<Vec<_>>(),
+            );
         }
-        
-        Reactor { states, handlers_map }
+
+        Reactor {
+            states,
+            handlers_map,
+        }
     }
 
     pub fn states(&self) -> &StateContainer {
@@ -30,13 +49,20 @@ impl Reactor {
     }
 
     pub fn dispatch<E: Event>(&self, event: E) -> anyhow::Result<()> {
-        let events = EventQueue::new();
-        events.push(AnyEvent::new(event));
-        while let Some(event) = events.pop() {
+        let queue = EventQueue::new();
+        queue.push(AnyEvent::new(event));
+        while let Some(event) = queue.pop() {
             let topics = TopicContainer::new();
             if let Some(handlers) = self.handlers_map.get(&TypeId::of::<E>()) {
+                let context = Context {
+                    states: &self.states,
+                    queue: &queue,
+                    topics: &topics,
+                    event: &event,
+                };
+
                 for h in handlers {
-                    (h.fn_box)(&event, &self.states, &events, &topics)?;
+                    h.call(&context)?;
                 }
             }
         }
@@ -45,17 +71,8 @@ impl Reactor {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum Dependency {
-    ReadState(TypeId),
-    ReadStateDelayed(TypeId),
-    WriteState(TypeId),
-    SubscribeTopic(TypeId),
-    PublishTopic(TypeId),
-}
-
 impl Dependency {
-    pub fn execution_order(all_deps: &[&[Dependency]]) -> Vec<usize> {
+    fn execution_order(all_deps: &[&[Dependency]]) -> Vec<usize> {
         let mut writer = HashMap::new();
         let mut subscribers = HashMap::new();
 
@@ -72,7 +89,7 @@ impl Dependency {
                         subscribers.entry(topic_id).or_insert(Vec::new()).push(idx);
                     }
 
-                    _ => {},
+                    _ => {}
                 }
             }
         }
@@ -113,7 +130,7 @@ impl Dependency {
                 }
 
                 self.pending.insert(idx);
-                for &child_idx in self.children.get(&idx).unwrap() {
+                for &child_idx in self.children.get(&idx).into_iter().flatten() {
                     if self.pending.contains(&child_idx) {
                         todo!();
                     }

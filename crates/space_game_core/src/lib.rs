@@ -1,6 +1,6 @@
 pub mod orbit;
 
-#[allow(unused)]
+#[allow(dead_code)]
 pub mod ecs;
 
 #[cfg(test)]

@@ -1,56 +1,91 @@
-use once_cell::sync::{OnceCell};
+use std::any::TypeId;
 
-use crate::{ecs::event::{AnyEvent, Event}, ecs::state::StateContainer};
-
-use super::{reactor::Dependency, event::EventQueue, topic::TopicContainer};
+use super::event::{AnyEvent, Event, EventQueue};
+use super::state::StateContainer;
+use super::topic::TopicContainer;
 
 pub struct Handler {
-    pub dependencies: &'static [Dependency],
-    pub fn_box: Box<dyn Fn(&AnyEvent, &StateContainer, &EventQueue, &TopicContainer) -> anyhow::Result<()>>,
+    event_id: TypeId,
+    dependencies: Vec<Dependency>,
+    fn_box: Box<dyn Fn(&Context) -> anyhow::Result<()>>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum Dependency {
+    ReadState(TypeId),
+    ReadStateDelayed(TypeId),
+    WriteState(TypeId),
+    SubscribeTopic(TypeId),
+    PublishTopic(TypeId),
+}
+
+pub struct Context<'a> {
+    pub states: &'a StateContainer,
+    pub queue: &'a EventQueue,
+    pub topics: &'a TopicContainer,
+    pub event: &'a AnyEvent,
 }
 
 impl Handler {
-    pub fn new<E, Args, F: HandlerFn<E, Args> + 'static>(f: F) -> Self {
+    pub fn new<E: Event, Args, F: HandlerFn<E, Args> + 'static>(f: F) -> Self {
         Handler {
+            event_id: F::event_id(),
             dependencies: F::dependencies(),
-            fn_box: Box::new(move |ev, world, queue, topics| f.call(ev, world, queue, topics)),
+            fn_box: Box::new(move |context| f.call(context)),
         }
+    }
+    pub fn event_id(&self) -> TypeId {
+        self.event_id
+    }
+
+    pub fn dependencies(&self) -> &[Dependency] {
+        &*self.dependencies
+    }
+
+    pub fn call(&self, context: &Context) -> anyhow::Result<()> {
+        (self.fn_box)(context)
     }
 }
 
 pub trait HandlerFn<E, Args> {
-    fn dependencies() -> &'static [Dependency];
+    fn event_id() -> TypeId;
+    fn dependencies() -> Vec<Dependency>;
 
-    fn call(&self, ev: &AnyEvent, world: &StateContainer, queue: &EventQueue, topics: &TopicContainer) -> anyhow::Result<()>;
+    fn call(&self, context: &Context) -> anyhow::Result<()>;
 }
 
-pub trait HandlerFnArg<'a> {
-    fn dependency() -> Option<Dependency>;
+pub trait HandlerFnArg {
+    type Builder: for<'c> HandlerFnArgBuilder<'c>;
+    fn dependencies() -> Vec<Dependency>;
+}
 
-    fn build(world: &'a StateContainer, queue: &'a EventQueue, topics: &'a TopicContainer) -> Self;
+pub trait HandlerFnArgBuilder<'c> {
+    type Arg;
+
+    fn build(context: &'c Context) -> Self::Arg;
 }
 
 macro_rules! impl_handler_fn {
     ($($Args:ident),*) => {
         impl<E, $($Args,)* F> HandlerFn<E, ($($Args,)*)> for F where
             E: Event,
-            $($Args: for <'a> HandlerFnArg<'a>,)*
+            $($Args: HandlerFnArg,)*
             F: Fn(&E, $($Args,)*) -> anyhow::Result<()>,
+            F: Fn(&E, $(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
         {
-            fn dependencies() -> &'static [Dependency] { 
-                static DEPS: OnceCell<Vec<Dependency>> = OnceCell::new();
-                if let Some(vec) = DEPS.get() { 
-                    return vec.as_slice();
-                }
-
-                let deps: &[Option<Dependency>] = &[$($Args::dependency(),)*];
-        
-                let _ = DEPS.set(deps.into_iter().flatten().cloned().collect());
-                DEPS.get().unwrap()
+            fn event_id() -> TypeId {
+                TypeId::of::<E>()
             }
-        
-            fn call(&self, ev: &AnyEvent, states: &StateContainer, events: &EventQueue, topics: &TopicContainer) -> anyhow::Result<()> {
-                (self)(ev.downcast(), $($Args::build(states, events, topics),)*)
+
+            fn dependencies() -> Vec<Dependency> {
+                #[allow(unused_mut)]
+                let mut result = Vec::new();
+                $(result.extend($Args::dependencies());)*
+                result
+            }
+
+            fn call(&self, context: &Context) -> anyhow::Result<()> {
+                (self)(context.event.downcast(), $($Args::Builder::build(context),)*)
             }
         }
     }

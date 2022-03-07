@@ -1,8 +1,11 @@
-use std::{any::{Any, TypeId}, cell::{RefCell, Ref, RefMut}, collections::HashMap, marker::PhantomData};
+use std::any::{Any, TypeId};
+use std::cell::{Ref, RefCell};
+use std::collections::HashMap;
+use std::marker::PhantomData;
 
-use super::{handler::HandlerFnArg, reactor::Dependency, state::StateContainer};
+use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Topic: 'static { }
+pub trait Topic: 'static {}
 
 pub struct AnyTopic(Box<dyn Any>);
 
@@ -24,17 +27,21 @@ impl AnyTopic {
 pub struct TopicContainer(RefCell<HashMap<TypeId, Vec<AnyTopic>>>);
 
 impl TopicContainer {
-    pub fn new() -> Self { 
-        Default::default() 
+    pub fn new() -> Self {
+        Default::default()
     }
 
     pub fn publish<T: Topic>(&self, t: T) {
-        self.0.borrow_mut().entry(TypeId::of::<T>()).or_default().push(AnyTopic::new(t));
+        self.0
+            .borrow_mut()
+            .entry(TypeId::of::<T>())
+            .or_default()
+            .push(AnyTopic::new(t));
     }
 
     pub fn get<T: Topic>(&self, idx: usize) -> Option<Ref<'_, T>> {
         let tid = TypeId::of::<T>();
-        if self.0.borrow().get(&tid).map(|v| idx < v.len()) != Some(true) { 
+        if self.0.borrow().get(&tid).map(|v| idx < v.len()) != Some(true) {
             return None;
         }
 
@@ -54,15 +61,23 @@ impl<'t, T: Topic> Publisher<'t, T> {
     pub fn publish(&self, t: T) {
         self.0.publish(t);
     }
-} 
+}
 
-impl<'t, T: Topic> HandlerFnArg<'t> for Publisher<'t, T> {
-    fn dependency() -> Option<super::reactor::Dependency> {
-        Some(Dependency::PublishTopic(TypeId::of::<T>()))
+impl<'t, T: Topic> HandlerFnArg for Publisher<'t, T> {
+    type Builder = PublisherBuilder<T>;
+
+    fn dependencies() -> Vec<Dependency> {
+        vec![Dependency::PublishTopic(TypeId::of::<T>())]
     }
+}
 
-    fn build(_world: &'t StateContainer, _events: &'t super::event::EventQueue, topics: &'t TopicContainer) -> Self {
-        Publisher(topics, PhantomData)
+pub struct PublisherBuilder<T>(PhantomData<T>);
+
+impl<'c, T: Topic> HandlerFnArgBuilder<'c> for PublisherBuilder<T> {
+    type Arg = Publisher<'c, T>;
+
+    fn build(context: &'c Context) -> Self::Arg {
+        Publisher(&context.topics, PhantomData)
     }
 }
 
@@ -74,13 +89,20 @@ impl<'t, T: Topic> Subscriber<'t, T> {
     }
 }
 
-impl<'t, T: Topic> HandlerFnArg<'t> for Subscriber<'t, T> {
-    fn dependency() -> Option<super::reactor::Dependency> {
-        Some(Dependency::SubscribeTopic(TypeId::of::<T>()))
-    }
+impl<'t, T: Topic> HandlerFnArg for Subscriber<'t, T> {
+    type Builder = SubscriberBuilder<T>;
 
-    fn build(world: &'t super::state::StateContainer, events: &'t super::event::EventQueue, topics: &'t TopicContainer) -> Self {
-        Subscriber(topics, PhantomData)
+    fn dependencies() -> Vec<Dependency> {
+        vec![Dependency::SubscribeTopic(TypeId::of::<T>())]
     }
 }
 
+pub struct SubscriberBuilder<T>(PhantomData<T>);
+
+impl<'c, T: Topic> HandlerFnArgBuilder<'c> for SubscriberBuilder<T> {
+    type Arg = Subscriber<'c, T>;
+
+    fn build(context: &'c Context) -> Subscriber<'c, T> {
+        Subscriber(&context.topics, PhantomData)
+    }
+}
