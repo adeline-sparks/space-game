@@ -1,5 +1,7 @@
 use std::any::TypeId;
 
+use impl_trait_for_tuples::impl_for_tuples;
+
 use super::event::{AnyEvent, Event, EventQueue};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
@@ -40,6 +42,7 @@ impl Handler {
             fn_box: Box::new(move |context| f.call(context)),
         }
     }
+
     pub fn event_id(&self) -> TypeId {
         self.event_id
     }
@@ -101,3 +104,23 @@ impl_handler_fn!(A1, A2);
 impl_handler_fn!(A1, A2, A3);
 impl_handler_fn!(A1, A2, A3, A4);
 impl_handler_fn!(A1, A2, A3, A4, A5);
+
+#[impl_for_tuples(5)]
+impl HandlerFnArg for Tuple {
+    for_tuples!(type Builder = ( #(Tuple::Builder),* ); );
+
+    fn dependencies(out: &mut Vec<Dependency>) {
+        for_tuples!(#(Tuple::dependencies(out);)*);
+    }
+}
+
+#[impl_for_tuples(5)]
+impl<'c> HandlerFnArgBuilder<'c> for Tuple {
+    for_tuples!(where #(Tuple: HandlerFnArgBuilder<'c>)* );
+
+    for_tuples!(type Arg = (#(Tuple::Arg),*); );
+
+    fn build(context: &'c Context) -> Self::Arg {
+        for_tuples!((#(Tuple::build(context)),*))
+    }
+}
