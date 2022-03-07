@@ -6,6 +6,9 @@ use super::handler::{Context, Dependency, Handler, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
+pub struct InitState;
+impl Event for InitState {}
+
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
 impl Reactor {
@@ -26,8 +29,8 @@ impl Reactor {
         Reactor(result)
     }
 
-    pub fn new_state(&self) -> StateContainer {
-        StateContainer::new(
+    pub fn new_state(&self) -> anyhow::Result<StateContainer> {
+        let states = StateContainer::new(
             self.0
                 .values()
                 .flatten()
@@ -38,7 +41,9 @@ impl Reactor {
                     | &Dependency::WriteState(id) => Some(id),
                     _ => None,
                 }),
-        )
+        );
+        self.dispatch(&states, InitState)?;
+        Ok(states)
     }
 
     pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) -> anyhow::Result<()> {

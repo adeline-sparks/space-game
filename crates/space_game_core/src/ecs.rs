@@ -6,7 +6,7 @@ mod topic;
 
 pub use event::{AnyEvent, Event, EventWriter};
 pub use handler::{Handler, HandlerFn};
-pub use reactor::Reactor;
+pub use reactor::{InitState, Reactor};
 pub use state::{DelayedReader, Reader, State, StateContainer, Writer};
 pub use topic::{Publisher, Subscriber, Topic};
 
@@ -51,7 +51,7 @@ mod test {
 
         let reactor = Reactor::builder().add(handler1).add(handler2).build();
 
-        let states = reactor.new_state();
+        let states = reactor.new_state().unwrap();
         assert!(reactor.dispatch(&states, MyEvent { counter: 5 }).is_ok());
         assert_eq!(
             states.get::<MyState>().sum,

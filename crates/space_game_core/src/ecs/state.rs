@@ -21,7 +21,6 @@ pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn AnyState>>>);
 pub trait AnyState: Any + 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
-    fn into_any(self: Box<Self>) -> Box<dyn Any>;
     fn clone_box(&self) -> Box<dyn AnyState>;
 }
 
@@ -35,12 +34,6 @@ impl StateContainer {
                 })
                 .collect(),
         )
-    }
-
-    pub fn remove<S: State>(&mut self) -> Option<Box<S>> {
-        self.0
-            .remove(&S::id())
-            .map(|a| a.into_inner().into_any().downcast().unwrap())
     }
 
     pub fn get<S: State>(&self) -> Ref<S> {
@@ -73,10 +66,6 @@ impl<S: Any + State> AnyState for S {
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 
