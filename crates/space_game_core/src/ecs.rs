@@ -31,35 +31,30 @@ mod test {
         }
         impl Event for MyEvent {}
 
-        let mut states = StateContainer::new();
-        states.insert_default::<MyState>();
-        states.insert_default::<MyStateCopy>();
+        fn handler1(ev: &MyEvent, mut state: Writer<'_, MyState>) -> anyhow::Result<()> {
+            state.sum += ev.counter;
+            Ok(())
+        }
 
-        let handler1 = Handler::new(
-            |ev: &MyEvent, mut state: Writer<'_, MyState>| -> anyhow::Result<()> {
-                state.sum += ev.counter;
-                Ok(())
-            },
-        );
+        fn handler2(ev: &MyEvent, ev_write: EventWriter<'_>) -> anyhow::Result<()> {
+            if ev.counter > 0 {
+                ev_write.write(MyEvent {
+                    counter: ev.counter - 1,
+                });
+                ev_write.write(MyEvent {
+                    counter: ev.counter - 1,
+                });
+            }
 
-        let handler2 = Handler::new(
-            |ev: &MyEvent, ev_write: EventWriter<'_>| -> anyhow::Result<()> {
-                if ev.counter > 0 {
-                    ev_write.write(MyEvent {
-                        counter: ev.counter - 1,
-                    });
-                    ev_write.write(MyEvent {
-                        counter: ev.counter - 1,
-                    });
-                }
-                Ok(())
-            },
-        );
+            Ok(())
+        }
 
-        let reactor = Reactor::new(states, vec![handler1, handler2]);
-        assert!(reactor.dispatch(MyEvent { counter: 5 }).is_ok());
+        let reactor = Reactor::new([Handler::new(&handler1), Handler::new(&handler2)]);
+
+        let states = reactor.new_state();
+        assert!(reactor.dispatch(&states, MyEvent { counter: 5 }).is_ok());
         assert_eq!(
-            reactor.states().get::<MyState>().unwrap().sum,
+            states.get::<MyState>().sum,
             1 * 5 + 2 * 4 + 4 * 3 + 8 * 2 + 16 * 1
         );
     }

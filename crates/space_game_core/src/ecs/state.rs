@@ -6,49 +6,67 @@ use std::ops::{Deref, DerefMut};
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait State: Clone + 'static {
+pub trait State: Clone + Default + 'static {
     fn id() -> StateId {
-        StateId(TypeId::of::<Self>())
+        StateId(TypeId::of::<Self>(), || Box::new(Self::default()))
     }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
-pub struct StateId(TypeId);
+pub struct StateId(TypeId, fn() -> Box<dyn AnyState>);
 
 #[derive(Default)]
-pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn Any>>>);
+pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn AnyState>>>);
+
+pub trait AnyState: Any + 'static {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+    fn clone_box(&self) -> Box<dyn AnyState>;
+}
 
 impl StateContainer {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn insert<S: State>(&mut self, state: Box<S>) -> Option<S> {
-        self.0
-            .insert(S::id(), RefCell::new(state))
-            .map(|a| *a.into_inner().downcast().unwrap())
-    }
-
-    pub fn insert_default<S: State + Default>(&mut self) -> Option<S> {
-        self.insert(Box::new(S::default()))
+    pub fn new(ids: impl IntoIterator<Item=StateId>) -> StateContainer {
+        StateContainer(ids
+            .into_iter()
+            .map(|id| {
+                let state = (id.1)();
+                (id, RefCell::new(state))
+            })
+            .collect()
+        )
     }
 
     pub fn remove<S: State>(&mut self) -> Option<Box<S>> {
         self.0
             .remove(&S::id())
-            .map(|a| a.into_inner().downcast().unwrap())
+            .map(|a| a.into_inner().into_any().downcast().unwrap())
     }
 
-    pub fn get<S: State>(&self) -> Option<Ref<S>> {
-        self.0
-            .get(&S::id())
-            .map(|r| Ref::map(r.borrow(), |a| a.downcast_ref().unwrap()))
+    pub fn get<S: State>(&self) -> Ref<S> {
+        Ref::map(self.0[&S::id()].borrow(), |a| a.as_any().downcast_ref::<S>().unwrap())
     }
 
-    pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
-        self.0
-            .get(&S::id())
-            .map(|r| RefMut::map(r.borrow_mut(), |a| a.downcast_mut().unwrap()))
+    pub fn get_mut<S: State>(&self) -> RefMut<S> {
+        RefMut::map(self.0[&S::id()].borrow_mut(), |a| a.as_any_mut().downcast_mut::<S>().unwrap())
+    }
+}
+
+impl<S: Any + State> AnyState for S {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn AnyState> {
+        Box::new(self.clone())
     }
 }
 
@@ -67,7 +85,7 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for ReaderBuilder<S> {
     type Arg = Reader<'c, S>;
 
     fn build(context: &'c Context) -> Reader<'c, S> {
-        Reader(context.states.get().unwrap())
+        Reader(context.states.get())
     }
 }
 
@@ -94,7 +112,7 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for DelayedReaderBuilder<S> {
     type Arg = DelayedReader<'c, S>;
 
     fn build(context: &'c Context) -> DelayedReader<'c, S> {
-        DelayedReader(context.states.get().unwrap())
+        DelayedReader(context.states.get())
     }
 }
 
@@ -122,7 +140,7 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for WriterBuilder<S> {
     type Arg = Writer<'c, S>;
 
     fn build(context: &'c Context) -> Writer<'c, S> {
-        Writer(context.states.get_mut().unwrap())
+        Writer(context.states.get_mut())
     }
 }
 

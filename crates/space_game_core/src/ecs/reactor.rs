@@ -6,43 +6,46 @@ use super::handler::{Context, Dependency, Handler};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
-pub struct Reactor {
-    states: StateContainer,
-    handlers_map: HashMap<EventId, Vec<Handler>>,
-}
+pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
 impl Reactor {
-    pub fn new<'a>(states: StateContainer, handlers: Vec<Handler>) -> Self {
-        let mut handlers_map: HashMap<EventId, Vec<Handler>> = HashMap::new();
-        for handler in handlers {
-            handlers_map
+    pub fn new<'a>(handlers: impl IntoIterator<Item=Handler>) -> Self {
+        let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
+        for handler in handlers.into_iter() {
+            result
                 .entry(handler.event_id())
                 .or_default()
                 .push(handler);
         }
 
-        for handlers in handlers_map.values_mut() {
+        for handlers in result.values_mut() {
             sort_handlers_by_execution_order(handlers);
         }
 
-        Reactor {
-            states,
-            handlers_map,
-        }
+        Reactor(result)
     }
 
-    pub fn states(&self) -> &StateContainer {
-        &self.states
+    pub fn new_state(&self) -> StateContainer {
+        StateContainer::new(self.0
+            .values()
+            .flatten()
+            .flat_map(|h| h.dependencies().iter())
+            .filter_map(|d| match d {
+                &Dependency::ReadState(id) |
+                &Dependency::ReadStateDelayed(id) |
+                &Dependency::WriteState(id) => Some(id),
+                _ => None
+            }))
     }
 
-    pub fn dispatch<E: Event>(&self, event: E) -> anyhow::Result<()> {
+    pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) -> anyhow::Result<()> {
         let queue = EventQueue::new();
         queue.push(AnyEvent::new(event));
         while let Some(event) = queue.pop() {
             let topics = TopicContainer::new();
-            if let Some(handlers) = self.handlers_map.get(&E::id()) {
+            if let Some(handlers) = self.0.get(&E::id()) {
                 let context = Context {
-                    states: &self.states,
+                    states,
                     queue: &queue,
                     topics: &topics,
                     event: &event,
