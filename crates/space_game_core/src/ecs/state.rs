@@ -6,10 +6,17 @@ use std::ops::{Deref, DerefMut};
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait State: Any + Clone + 'static {}
+pub trait State: Clone + 'static {
+    fn id() -> StateId {
+        StateId(TypeId::of::<Self>())
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
+pub struct StateId(TypeId);
 
 #[derive(Default)]
-pub struct StateContainer(HashMap<TypeId, RefCell<Box<dyn Any>>>);
+pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn Any>>>);
 
 impl StateContainer {
     pub fn new() -> Self {
@@ -18,7 +25,7 @@ impl StateContainer {
 
     pub fn insert<S: State>(&mut self, state: Box<S>) -> Option<S> {
         self.0
-            .insert(TypeId::of::<S>(), RefCell::new(state))
+            .insert(S::id(), RefCell::new(state))
             .map(|a| *a.into_inner().downcast().unwrap())
     }
 
@@ -28,19 +35,19 @@ impl StateContainer {
 
     pub fn remove<S: State>(&mut self) -> Option<Box<S>> {
         self.0
-            .remove(&TypeId::of::<S>())
+            .remove(&S::id())
             .map(|a| a.into_inner().downcast().unwrap())
     }
 
     pub fn get<S: State>(&self) -> Option<Ref<S>> {
         self.0
-            .get(&TypeId::of::<S>())
+            .get(&S::id())
             .map(|r| Ref::map(r.borrow(), |a| a.downcast_ref().unwrap()))
     }
 
     pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
         self.0
-            .get(&TypeId::of::<S>())
+            .get(&S::id())
             .map(|r| RefMut::map(r.borrow_mut(), |a| a.downcast_mut().unwrap()))
     }
 }
@@ -50,7 +57,7 @@ pub struct Reader<'s, S: State>(Ref<'s, S>);
 impl<'s, S: State> HandlerFnArg for Reader<'s, S> {
     type Builder = ReaderBuilder<S>;
     fn dependencies(out: &mut Vec<Dependency>) {
-        out.push(Dependency::ReadState(TypeId::of::<S>()));
+        out.push(Dependency::ReadState(S::id()));
     }
 }
 
@@ -77,7 +84,7 @@ pub struct DelayedReader<'s, S: State>(Ref<'s, S>);
 impl<'s, S: State> HandlerFnArg for DelayedReader<'s, S> {
     type Builder = DelayedReaderBuilder<S>;
     fn dependencies(out: &mut Vec<Dependency>) {
-        out.push(Dependency::ReadStateDelayed(TypeId::of::<S>()));
+        out.push(Dependency::ReadStateDelayed(S::id()));
     }
 }
 
@@ -105,7 +112,7 @@ impl<'s, S: State> HandlerFnArg for Writer<'s, S> {
     type Builder = WriterBuilder<S>;
 
     fn dependencies(out: &mut Vec<Dependency>) {
-        out.push(Dependency::WriteState(TypeId::of::<S>()));
+        out.push(Dependency::WriteState(S::id()));
     }
 }
 

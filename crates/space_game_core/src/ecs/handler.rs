@@ -1,24 +1,22 @@
-use std::any::TypeId;
-
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::event::{AnyEvent, Event, EventQueue};
-use super::state::StateContainer;
-use super::topic::TopicContainer;
+use super::event::{AnyEvent, Event, EventId, EventQueue};
+use super::state::{StateContainer, StateId};
+use super::topic::{TopicContainer, TopicId};
 
 pub struct Handler {
-    event_id: TypeId,
+    event_id: EventId,
     dependencies: Vec<Dependency>,
     fn_box: Box<dyn Fn(&Context) -> anyhow::Result<()>>,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Dependency {
-    ReadState(TypeId),
-    ReadStateDelayed(TypeId),
-    WriteState(TypeId),
-    SubscribeTopic(TypeId),
-    PublishTopic(TypeId),
+    ReadState(StateId),
+    ReadStateDelayed(StateId),
+    WriteState(StateId),
+    SubscribeTopic(TopicId),
+    PublishTopic(TopicId),
 }
 
 pub struct Context<'a> {
@@ -43,7 +41,7 @@ impl Handler {
         }
     }
 
-    pub fn event_id(&self) -> TypeId {
+    pub fn event_id(&self) -> EventId {
         self.event_id
     }
 
@@ -57,7 +55,7 @@ impl Handler {
 }
 
 pub trait HandlerFn<E, Args> {
-    fn event_id() -> TypeId;
+    fn event_id() -> EventId;
     fn dependencies(out: &mut Vec<Dependency>);
 
     fn call(&self, context: &Context) -> anyhow::Result<()>;
@@ -82,8 +80,8 @@ macro_rules! impl_handler_fn {
             F: Fn(&E, $($Args,)*) -> anyhow::Result<()>,
             F: Fn(&E, $(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
         {
-            fn event_id() -> TypeId {
-                TypeId::of::<E>()
+            fn event_id() -> EventId {
+                E::id()
             }
 
             fn dependencies(out: &mut Vec<Dependency>) {

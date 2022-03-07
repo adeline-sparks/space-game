@@ -5,7 +5,14 @@ use std::marker::PhantomData;
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Topic: 'static {}
+pub trait Topic: 'static {
+    fn id() -> TopicId {
+        TopicId(TypeId::of::<Self>())
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
+pub struct TopicId(TypeId);
 
 pub struct AnyTopic(Box<dyn Any>);
 
@@ -67,7 +74,7 @@ impl<'t, T: Topic> HandlerFnArg for Publisher<'t, T> {
     type Builder = PublisherBuilder<T>;
 
     fn dependencies(out: &mut Vec<Dependency>) {
-        out.push(Dependency::PublishTopic(TypeId::of::<T>()));
+        out.push(Dependency::PublishTopic(T::id()));
     }
 }
 
@@ -93,7 +100,7 @@ impl<'t, T: Topic> HandlerFnArg for Subscriber<'t, T> {
     type Builder = SubscriberBuilder<T>;
 
     fn dependencies(out: &mut Vec<Dependency>) {
-        out.push(Dependency::SubscribeTopic(TypeId::of::<T>()));
+        out.push(Dependency::SubscribeTopic(T::id()));
     }
 }
 

@@ -4,7 +4,14 @@ use std::collections::VecDeque;
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Event: 'static {}
+pub trait Event: 'static {
+    fn id() -> EventId {
+        EventId(TypeId::of::<Self>())
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
+pub struct EventId(TypeId);
 
 pub struct AnyEvent(Box<dyn Any>);
 
@@ -13,8 +20,8 @@ impl AnyEvent {
         Self(Box::new(ev))
     }
 
-    pub fn type_id(&self) -> TypeId {
-        self.0.type_id()
+    pub fn id(&self) -> EventId {
+        EventId(self.0.type_id())
     }
 
     pub fn downcast<E: Event>(&self) -> &E {
