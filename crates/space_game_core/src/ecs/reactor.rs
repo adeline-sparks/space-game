@@ -93,20 +93,20 @@ fn sort_handlers_by_execution_order(handlers: &mut Vec<Handler>) {
     handlers.extend(
         order
             .iter()
-            .map(|&idx| handlers_temp[idx].take().unwrap())
+            .map(|&idx| handlers_temp[idx].take().expect("Execution order contains duplicate"))
             .collect::<Vec<_>>(),
     );
 }
 
 fn execution_order(all_deps: &[&[Dependency]]) -> Vec<usize> {
-    let mut writer = HashMap::new();
+    let mut writers = HashMap::new();
     let mut subscribers = HashMap::new();
 
     for (idx, &deps) in all_deps.iter().enumerate() {
         for dep in deps {
             match dep {
                 Dependency::WriteState(write_id) => {
-                    if let Some(_conflict) = writer.insert(*write_id, idx) {
+                    if let Some(_conflict) = writers.insert(*write_id, idx) {
                         todo!();
                     }
                 }
@@ -124,11 +124,27 @@ fn execution_order(all_deps: &[&[Dependency]]) -> Vec<usize> {
     for (idx, &deps) in all_deps.iter().enumerate() {
         for dep in deps {
             let (parents, child) = match dep {
-                Dependency::ReadState(tid) => (slice::from_ref(&idx), *writer.get(&tid).unwrap()),
-                Dependency::ReadStateDelayed(tid) => {
-                    (slice::from_ref(writer.get(&tid).unwrap()), idx)
+                Dependency::ReadState(tid) => {
+                    if let Some(writer) = writers.get(&tid) {
+                        (slice::from_ref(&idx), *writer)
+                    } else {
+                        continue
+                    }
                 }
-                Dependency::PublishTopic(tid) => (subscribers.get(&tid).unwrap().as_slice(), idx),
+                Dependency::ReadStateDelayed(tid) => {
+                    if let Some(writer) = writers.get(&tid) {
+                        (slice::from_ref(writer), idx)
+                    } else {
+                        continue
+                    }
+                }
+                Dependency::PublishTopic(tid) => {
+                    if let Some(subs) = subscribers.get(&tid) {
+                        (subs.as_slice(), idx)
+                    } else {
+                        continue
+                    }
+                }
                 Dependency::WriteState(_) | Dependency::SubscribeTopic(_) => continue,
             };
 

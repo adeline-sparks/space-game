@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId};
+use std::any::{Any, TypeId, type_name};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
@@ -13,19 +13,24 @@ pub trait Event: 'static {
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
 pub struct EventId(TypeId);
 
-pub struct AnyEvent(Box<dyn Any>);
+pub struct AnyEvent(Box<dyn Any>, &'static str);
 
 impl AnyEvent {
     pub fn new<E: Event>(ev: E) -> Self {
-        Self(Box::new(ev))
+        Self(Box::new(ev), type_name::<E>())
     }
 
     pub fn id(&self) -> EventId {
         EventId(self.0.type_id())
     }
 
-    pub fn downcast<E: Event>(&self) -> &E {
-        self.0.downcast_ref().unwrap() // TODO
+    pub fn type_name(&self) -> &'static str {
+        self.1
+    }
+
+    #[track_caller]
+    pub fn downcast<E: Event>(&self) -> Option<&E> {
+        self.0.downcast_ref()
     }
 }
 

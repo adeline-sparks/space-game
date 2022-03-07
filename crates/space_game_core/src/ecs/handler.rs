@@ -1,4 +1,7 @@
+use std::any::type_name;
+
 use impl_trait_for_tuples::impl_for_tuples;
+use anyhow::bail;
 
 use super::event::{AnyEvent, Event, EventId, EventQueue};
 use super::state::{StateContainer, StateId};
@@ -81,7 +84,13 @@ macro_rules! impl_handler_fn {
                         result
                     },
                     fn_box: Box::new(move |context| {
-                        make_fn(&self)(context.event.downcast(), $($Args::Builder::build(context),)*)
+                        if let Some(event) = context.event.downcast() {
+                            make_fn(&self)(event, $($Args::Builder::build(context),)*)
+                        } else {
+                            let expected = type_name::<E>();
+                            let actual = context.event.type_name();
+                            bail!("Handler expected `{expected}` but was called with `{actual}`")
+                        }
                     }),
                 }
             }
