@@ -2,20 +2,21 @@ use std::collections::{HashMap, HashSet};
 use std::slice;
 
 use super::event::{AnyEvent, Event, EventId, EventQueue};
-use super::handler::{Context, Dependency, Handler};
+use super::handler::{Context, Dependency, Handler, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
 impl Reactor {
-    pub fn new<'a>(handlers: impl IntoIterator<Item=Handler>) -> Self {
+    pub fn builder() -> ReactorBuilder {
+        ReactorBuilder::default()
+    }
+
+    pub fn new<'a>(handlers: impl IntoIterator<Item = Handler>) -> Self {
         let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
-        for handler in handlers.into_iter() {
-            result
-                .entry(handler.event_id())
-                .or_default()
-                .push(handler);
+        for handler in handlers {
+            result.entry(handler.event_id()).or_default().push(handler);
         }
 
         for handlers in result.values_mut() {
@@ -26,24 +27,26 @@ impl Reactor {
     }
 
     pub fn new_state(&self) -> StateContainer {
-        StateContainer::new(self.0
-            .values()
-            .flatten()
-            .flat_map(|h| h.dependencies().iter())
-            .filter_map(|d| match d {
-                &Dependency::ReadState(id) |
-                &Dependency::ReadStateDelayed(id) |
-                &Dependency::WriteState(id) => Some(id),
-                _ => None
-            }))
+        StateContainer::new(
+            self.0
+                .values()
+                .flatten()
+                .flat_map(|h| h.dependencies().iter())
+                .filter_map(|d| match d {
+                    &Dependency::ReadState(id)
+                    | &Dependency::ReadStateDelayed(id)
+                    | &Dependency::WriteState(id) => Some(id),
+                    _ => None,
+                }),
+        )
     }
 
     pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) -> anyhow::Result<()> {
         let queue = EventQueue::new();
         queue.push(AnyEvent::new(event));
         while let Some(event) = queue.pop() {
-            let topics = TopicContainer::new();
             if let Some(handlers) = self.0.get(&E::id()) {
+                let topics = TopicContainer::new();
                 let context = Context {
                     states,
                     queue: &queue,
@@ -58,6 +61,20 @@ impl Reactor {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct ReactorBuilder(Vec<Handler>);
+
+impl ReactorBuilder {
+    pub fn add<E: Event, Args>(mut self, f: impl HandlerFn<E, Args>) -> Self {
+        self.0.push(f.into_handler());
+        self
+    }
+
+    pub fn build(self) -> Reactor {
+        Reactor::new(self.0)
     }
 }
 
@@ -102,15 +119,11 @@ fn execution_order(all_deps: &[&[Dependency]]) -> Vec<usize> {
     for (idx, &deps) in all_deps.iter().enumerate() {
         for dep in deps {
             let (parents, child) = match dep {
-                Dependency::ReadState(tid) => {
-                    (slice::from_ref(&idx), *writer.get(&tid).unwrap())
-                }
+                Dependency::ReadState(tid) => (slice::from_ref(&idx), *writer.get(&tid).unwrap()),
                 Dependency::ReadStateDelayed(tid) => {
                     (slice::from_ref(writer.get(&tid).unwrap()), idx)
                 }
-                Dependency::PublishTopic(tid) => {
-                    (subscribers.get(&tid).unwrap().as_slice(), idx)
-                }
+                Dependency::PublishTopic(tid) => (subscribers.get(&tid).unwrap().as_slice(), idx),
                 Dependency::WriteState(_) | Dependency::SubscribeTopic(_) => continue,
             };
 

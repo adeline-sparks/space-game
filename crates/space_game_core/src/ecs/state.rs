@@ -26,14 +26,14 @@ pub trait AnyState: Any + 'static {
 }
 
 impl StateContainer {
-    pub fn new(ids: impl IntoIterator<Item=StateId>) -> StateContainer {
-        StateContainer(ids
-            .into_iter()
-            .map(|id| {
-                let state = (id.1)();
-                (id, RefCell::new(state))
-            })
-            .collect()
+    pub fn new(ids: impl IntoIterator<Item = StateId>) -> StateContainer {
+        StateContainer(
+            ids.into_iter()
+                .map(|id| {
+                    let state = (id.1)();
+                    (id, RefCell::new(state))
+                })
+                .collect(),
         )
     }
 
@@ -44,11 +44,15 @@ impl StateContainer {
     }
 
     pub fn get<S: State>(&self) -> Ref<S> {
-        Ref::map(self.0[&S::id()].borrow(), |a| a.as_any().downcast_ref::<S>().unwrap())
+        Ref::map(self.0[&S::id()].borrow(), |a| {
+            a.as_any().downcast_ref::<S>().unwrap()
+        })
     }
 
     pub fn get_mut<S: State>(&self) -> RefMut<S> {
-        RefMut::map(self.0[&S::id()].borrow_mut(), |a| a.as_any_mut().downcast_mut::<S>().unwrap())
+        RefMut::map(self.0[&S::id()].borrow_mut(), |a| {
+            a.as_any_mut().downcast_mut::<S>().unwrap()
+        })
     }
 }
 

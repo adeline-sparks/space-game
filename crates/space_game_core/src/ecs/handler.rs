@@ -27,20 +27,6 @@ pub struct Context<'a> {
 }
 
 impl Handler {
-    pub fn new<E: Event, Args, F: HandlerFn<E, Args> + 'static>(f: F) -> Self {
-        let mut dependencies = Vec::new();
-        F::dependencies(&mut dependencies);
-        Handler {
-            event_id: F::event_id(),
-            dependencies: {
-                let mut result = Vec::new();
-                F::dependencies(&mut result);
-                result
-            },
-            fn_box: Box::new(move |context| f.call(context)),
-        }
-    }
-
     pub fn event_id(&self) -> EventId {
         self.event_id
     }
@@ -55,19 +41,17 @@ impl Handler {
 }
 
 pub trait HandlerFn<E, Args> {
-    fn event_id() -> EventId;
-    fn dependencies(out: &mut Vec<Dependency>);
-
-    fn call(&self, context: &Context) -> anyhow::Result<()>;
+    fn into_handler(self) -> Handler;
 }
 
 pub trait HandlerFnArg {
     type Builder: for<'c> HandlerFnArgBuilder<'c>;
+
     fn dependencies(out: &mut Vec<Dependency>);
 }
 
 pub trait HandlerFnArgBuilder<'c> {
-    type Arg;
+    type Arg: HandlerFnArg;
 
     fn build(context: &'c Context) -> Self::Arg;
 }
@@ -77,20 +61,29 @@ macro_rules! impl_handler_fn {
         impl<E, $($Args,)* F> HandlerFn<E, ($($Args,)*)> for F where
             E: Event,
             $($Args: HandlerFnArg,)*
-            F: Fn(&E, $($Args,)*) -> anyhow::Result<()>,
-            F: Fn(&E, $(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
+            F: 'static,
+            for<'f> &'f F: Fn(&E, $($Args,)*) -> anyhow::Result<()>,
+            for<'f> &'f F: Fn(&E, $(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
         {
-            fn event_id() -> EventId {
-                E::id()
-            }
+            fn into_handler(self) -> Handler {
+                fn make_fn<E, $($Args,)*>(
+                    f: impl Fn(&E, $($Args,)*) -> anyhow::Result<()>
+                ) -> impl Fn(&E, $($Args,)*) -> anyhow::Result<()> {
+                    f
+                }
 
-            fn dependencies(out: &mut Vec<Dependency>) {
-                let _ = out;
-                $($Args::dependencies(out));*
-            }
-
-            fn call(&self, context: &Context) -> anyhow::Result<()> {
-                (self)(context.event.downcast(), $($Args::Builder::build(context),)*)
+                Handler {
+                    event_id: E::id(),
+                    dependencies: {
+                        #[allow(unused_mut)]
+                        let mut result = Vec::new();
+                        $($Args::dependencies(&mut result);)*
+                        result
+                    },
+                    fn_box: Box::new(move |context| {
+                        make_fn(&self)(context.event.downcast(), $($Args::Builder::build(context),)*)
+                    }),
+                }
             }
         }
     }

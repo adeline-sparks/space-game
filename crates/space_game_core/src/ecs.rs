@@ -49,7 +49,7 @@ mod test {
             Ok(())
         }
 
-        let reactor = Reactor::new([Handler::new(&handler1), Handler::new(&handler2)]);
+        let reactor = Reactor::builder().add(handler1).add(handler2).build();
 
         let states = reactor.new_state();
         assert!(reactor.dispatch(&states, MyEvent { counter: 5 }).is_ok());
