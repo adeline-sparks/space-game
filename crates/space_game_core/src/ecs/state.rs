@@ -56,6 +56,17 @@ impl StateContainer {
     }
 }
 
+impl Clone for StateContainer {
+    fn clone(&self) -> Self {
+        StateContainer(
+            self.0
+                .iter()
+                .map(|(id, r)| (id.clone(), RefCell::new(r.borrow().clone_box())))
+                .collect(),
+        )
+    }
+}
+
 impl<S: Any + State> AnyState for S {
     fn as_any(&self) -> &dyn Any {
         self
