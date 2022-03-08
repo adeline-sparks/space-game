@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId, type_name};
+use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 

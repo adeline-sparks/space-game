@@ -1,19 +1,47 @@
-use std::any::{Any, TypeId};
+use std::any::{type_name, Any, TypeId};
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait State: Clone + Default + 'static {
-    fn id() -> StateId {
-        StateId(TypeId::of::<Self>(), || Box::new(Self::default()))
+#[derive(Eq, Clone, Debug)]
+pub struct StateId {
+    id: TypeId,
+    name: &'static str,
+    default_fn: fn() -> Box<dyn AnyState>,
+}
+
+impl PartialEq for StateId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
-pub struct StateId(TypeId, fn() -> Box<dyn AnyState>);
+impl Hash for StateId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl Display for StateId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name)
+    }
+}
+
+pub trait State: Clone + Default + 'static {
+    fn id() -> StateId {
+        StateId {
+            id: TypeId::of::<Self>(),
+            name: type_name::<Self>(),
+            default_fn: || Box::new(Self::default()),
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn AnyState>>>);
@@ -29,7 +57,7 @@ impl StateContainer {
         StateContainer(
             ids.into_iter()
                 .map(|id| {
-                    let state = (id.1)();
+                    let state = (id.default_fn)();
                     (id, RefCell::new(state))
                 })
                 .collect(),

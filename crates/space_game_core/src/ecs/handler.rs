@@ -1,7 +1,9 @@
 use std::any::type_name;
+use std::fmt::{Debug, Display};
+use std::panic::Location;
 
-use impl_trait_for_tuples::impl_for_tuples;
 use anyhow::bail;
+use impl_trait_for_tuples::impl_for_tuples;
 
 use super::event::{AnyEvent, Event, EventId, EventQueue};
 use super::state::{StateContainer, StateId};
@@ -11,6 +13,31 @@ pub struct Handler {
     event_id: EventId,
     dependencies: Vec<Dependency>,
     fn_box: Box<dyn Fn(&Context) -> anyhow::Result<()>>,
+    name: Option<String>,
+    location: Location<'static>,
+}
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Handler")
+            .field("event_id", &self.event_id)
+            .field("dependencies", &self.dependencies)
+            .field("fn_box", &())
+            .field("name", &self.name)
+            .field("location", &self.location)
+            .finish()
+    }
+}
+
+impl Display for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} ({})",
+            self.name.as_deref().unwrap_or("Unnamed handler"),
+            self.location,
+        )
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -41,9 +68,18 @@ impl Handler {
     pub fn call(&self, context: &Context) -> anyhow::Result<()> {
         (self.fn_box)(context)
     }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn location(&self) -> &Location<'static> {
+        &self.location
+    }
 }
 
 pub trait HandlerFn<E, Args> {
+    #[track_caller]
     fn into_handler(self) -> Handler;
 }
 
@@ -68,6 +104,7 @@ macro_rules! impl_handler_fn {
             for<'f> &'f F: Fn(&E, $($Args,)*) -> anyhow::Result<()>,
             for<'f> &'f F: Fn(&E, $(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
         {
+            #[track_caller]
             fn into_handler(self) -> Handler {
                 fn make_fn<E, $($Args,)*>(
                     f: impl Fn(&E, $($Args,)*) -> anyhow::Result<()>
@@ -92,6 +129,8 @@ macro_rules! impl_handler_fn {
                             bail!("Handler expected `{expected}` but was called with `{actual}`")
                         }
                     }),
+                    name: None,
+                    location: Location::caller().clone(),
                 }
             }
         }
