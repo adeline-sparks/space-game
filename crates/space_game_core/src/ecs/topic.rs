@@ -3,7 +3,8 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
+use super::dependency::Dependency;
+use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
 
 pub trait Topic: 'static {
     fn id() -> TopicId {

@@ -5,9 +5,10 @@ use std::panic::Location;
 use anyhow::bail;
 use impl_trait_for_tuples::impl_for_tuples;
 
+use super::dependency::Dependency;
 use super::event::{AnyEvent, Event, EventId, EventQueue};
-use super::state::{StateContainer, StateId};
-use super::topic::{TopicContainer, TopicId};
+use super::state::StateContainer;
+use super::topic::TopicContainer;
 
 pub struct Handler {
     event_id: EventId,
@@ -38,15 +39,6 @@ impl Display for Handler {
             self.location,
         )
     }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum Dependency {
-    ReadState(StateId),
-    ReadStateDelayed(StateId),
-    WriteState(StateId),
-    SubscribeTopic(TopicId),
-    PublishTopic(TopicId),
 }
 
 pub struct Context<'a> {

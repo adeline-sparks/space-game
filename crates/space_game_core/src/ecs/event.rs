@@ -2,7 +2,8 @@ use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
+use super::dependency::Dependency;
+use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
 
 pub trait Event: 'static {
     fn id() -> EventId {
