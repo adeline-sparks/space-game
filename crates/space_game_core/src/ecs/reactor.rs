@@ -23,7 +23,7 @@ impl Reactor {
     ) -> Result<Self, NoExecutionOrderError> {
         let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
         for handler in handlers {
-            result.entry(handler.event_id()).or_default().push(handler);
+            result.entry(handler.event_id().clone()).or_default().push(handler);
         }
 
         for handlers in result.values_mut() {

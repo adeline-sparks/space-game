@@ -11,7 +11,7 @@ pub trait Event: 'static {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct EventId(TypeId);
 
 pub struct AnyEvent(Box<dyn Any>, &'static str);

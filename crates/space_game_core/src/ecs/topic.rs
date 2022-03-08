@@ -12,7 +12,7 @@ pub trait Topic: 'static {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct TopicId(TypeId);
 
 pub struct AnyTopic(Box<dyn Any>);

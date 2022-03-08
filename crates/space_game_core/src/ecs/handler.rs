@@ -49,8 +49,8 @@ pub struct Context<'a> {
 }
 
 impl Handler {
-    pub fn event_id(&self) -> EventId {
-        self.event_id
+    pub fn event_id(&self) -> &EventId {
+        &self.event_id
     }
 
     pub fn dependencies(&self) -> &[Dependency] {
