@@ -2,7 +2,6 @@ use std::any::type_name;
 use std::fmt::{Debug, Display};
 use std::panic::Location;
 
-use anyhow::bail;
 use impl_trait_for_tuples::impl_for_tuples;
 
 use super::dependency::Dependency;
@@ -118,7 +117,7 @@ macro_rules! impl_handler_fn {
                         } else {
                             let expected = type_name::<E>();
                             let actual = context.event.type_name();
-                            bail!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
+                            panic!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
                         }
                     }),
                     name: None,

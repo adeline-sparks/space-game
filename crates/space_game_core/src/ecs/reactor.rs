@@ -14,23 +14,6 @@ impl Event for InitState {}
 
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
-#[derive(Error, Debug)]
-pub struct DispatchErrors(Vec<anyhow::Error>);
-
-impl Display for DispatchErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.len() == 1 {
-            self.0.first().unwrap().fmt(f)
-        } else {
-            f.write_str("Multiple errors during Reactor::dispatch\n")?;
-            for err in &self.0 {
-                write!(f, "{}\n", err)?;
-            }
-            Ok(())
-        }
-    }
-}
-
 impl Reactor {
     pub fn builder() -> ReactorBuilder {
         ReactorBuilder::default()
@@ -38,7 +21,7 @@ impl Reactor {
 
     pub fn new<'a>(
         handlers: impl IntoIterator<Item = Handler>,
-    ) -> Result<Self, NoExecutionOrderError> {
+    ) -> Result<Self, ExecutionOrderConflictError> {
         let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
         for handler in handlers {
             result
@@ -54,7 +37,7 @@ impl Reactor {
         Ok(Reactor(result))
     }
 
-    pub fn new_state_container(&self) -> Result<StateContainer, DispatchErrors> {
+    pub fn new_state_container(&self) -> StateContainer {
         let states = StateContainer::new(
             self.0
                 .values()
@@ -64,16 +47,11 @@ impl Reactor {
                 .collect::<HashSet<_>>(),
         );
 
-        self.dispatch(&states, InitState)?;
-        Ok(states)
+        self.dispatch(&states, InitState);
+        states
     }
 
-    pub fn dispatch<E: Event>(
-        &self,
-        states: &StateContainer,
-        event: E,
-    ) -> Result<(), DispatchErrors> {
-        let mut errors = Vec::new();
+    pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) {
         let queue = EventQueue::new();
         queue.push(AnyEvent::new(event));
         while let Some(event) = queue.pop() {
@@ -89,27 +67,31 @@ impl Reactor {
                 for h in handlers {
                     match h.call(&context) {
                         Ok(()) => {}
-                        Err(err) => errors.push(err),
+                        Err(err) => panic!("Error in handler {}: {}", h, err),
                     }
                 }
             }
-        }
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(DispatchErrors(errors))
         }
     }
 }
 
 #[derive(Error, Debug)]
-#[error("Handlers have no possible execution order: {0}")]
-pub struct NoExecutionOrderError(String);
+pub struct ExecutionOrderConflictError(Vec<String>);
+
+impl Display for ExecutionOrderConflictError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Found dependency conflict(s) in execution order.\n")?;
+        for msg in &self.0 {
+            write!(f, "{}\n", msg)?;
+        }
+
+        Ok(())
+    }
+}
 
 fn sort_handlers_by_execution_order(
     handlers: &mut Vec<Handler>,
-) -> Result<(), NoExecutionOrderError> {
+) -> Result<(), ExecutionOrderConflictError> {
     let all_deps = handlers
         .iter()
         .map(|h| h.dependencies())
@@ -117,12 +99,11 @@ fn sort_handlers_by_execution_order(
     let order = match execution_order(&all_deps) {
         Ok(order) => order,
         Err(errors) => {
-            let message = errors
+            let messages = errors
                 .iter()
                 .map(|e| e.error_message(|idx| handlers[idx].to_string()))
-                .collect::<Vec<_>>()
-                .join("\n");
-            return Err(NoExecutionOrderError(message));
+                .collect::<Vec<_>>();
+            return Err(ExecutionOrderConflictError(messages));
         }
     };
 
@@ -133,7 +114,7 @@ fn sort_handlers_by_execution_order(
             .map(|&idx| {
                 handlers_temp[idx]
                     .take()
-                    .expect("Execution order contains duplicate")
+                    .expect("execution_order() returned a duplicate")
             })
             .collect::<Vec<_>>(),
     );
@@ -150,7 +131,7 @@ impl ReactorBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Reactor, NoExecutionOrderError> {
+    pub fn build(self) -> Result<Reactor, ExecutionOrderConflictError> {
         Reactor::new(self.0)
     }
 }

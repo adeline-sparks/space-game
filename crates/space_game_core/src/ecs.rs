@@ -56,8 +56,8 @@ mod test {
             .build()
             .unwrap();
 
-        let states = reactor.new_state_container().unwrap();
-        reactor.dispatch(&states, MyEvent { counter: 5 }).unwrap();
+        let states = reactor.new_state_container();
+        reactor.dispatch(&states, MyEvent { counter: 5 });
         assert_eq!(
             states.get::<MyState>().unwrap().sum,
             1 * 5 + 2 * 4 + 4 * 3 + 8 * 2 + 16 * 1
