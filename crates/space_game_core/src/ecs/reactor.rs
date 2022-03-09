@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 
 use thiserror::Error;
 
-use super::dependency::{execution_order, Dependency};
+use super::dependency::execution_order;
 use super::event::{AnyEvent, Event, EventId, EventQueue};
 use super::handler::{Context, Handler, HandlerFn};
 use super::state::StateContainer;
@@ -12,6 +13,23 @@ pub struct InitState;
 impl Event for InitState {}
 
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
+
+#[derive(Error, Debug)]
+pub struct DispatchErrors(Vec<anyhow::Error>);
+
+impl Display for DispatchErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.len() == 1 {
+            self.0.first().unwrap().fmt(f)
+        } else {
+            f.write_str("Multiple errors during Reactor::dispatch\n")?;
+            for err in &self.0 {
+                write!(f, "{}\n", err)?;
+            }
+            Ok(())
+        }
+    }
+}
 
 impl Reactor {
     pub fn builder() -> ReactorBuilder {
@@ -23,7 +41,10 @@ impl Reactor {
     ) -> Result<Self, NoExecutionOrderError> {
         let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
         for handler in handlers {
-            result.entry(handler.event_id().clone()).or_default().push(handler);
+            result
+                .entry(handler.event_id().clone())
+                .or_default()
+                .push(handler);
         }
 
         for handlers in result.values_mut() {
@@ -33,25 +54,26 @@ impl Reactor {
         Ok(Reactor(result))
     }
 
-    pub fn new_state(&self) -> anyhow::Result<StateContainer> {
+    pub fn new_state_container(&self) -> Result<StateContainer, DispatchErrors> {
         let states = StateContainer::new(
             self.0
                 .values()
                 .flatten()
                 .flat_map(|h| h.dependencies().iter())
-                .filter_map(|d| match d {
-                    Dependency::ReadState(id)
-                    | Dependency::ReadStateDelayed(id)
-                    | Dependency::WriteState(id) => Some(id),
-                    _ => None,
-                })
-                .cloned(),
+                .filter_map(|d| d.state_id().cloned())
+                .collect::<HashSet<_>>(),
         );
+
         self.dispatch(&states, InitState)?;
         Ok(states)
     }
 
-    pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) -> anyhow::Result<()> {
+    pub fn dispatch<E: Event>(
+        &self,
+        states: &StateContainer,
+        event: E,
+    ) -> Result<(), DispatchErrors> {
+        let mut errors = Vec::new();
         let queue = EventQueue::new();
         queue.push(AnyEvent::new(event));
         while let Some(event) = queue.pop() {
@@ -65,12 +87,19 @@ impl Reactor {
                 };
 
                 for h in handlers {
-                    h.call(&context)?;
+                    match h.call(&context) {
+                        Ok(()) => {}
+                        Err(err) => errors.push(err),
+                    }
                 }
             }
         }
 
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(DispatchErrors(errors))
+        }
     }
 }
 

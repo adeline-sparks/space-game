@@ -65,16 +65,18 @@ impl StateContainer {
         )
     }
 
-    pub fn get<S: State>(&self) -> Ref<S> {
-        Ref::map(self.0[&S::id()].borrow(), |a| {
+    pub fn get<S: State>(&self) -> Option<Ref<S>> {
+        let cell = self.0.get(&S::id())?;
+        Some(Ref::map(cell.borrow(), |a| {
             a.as_any().downcast_ref::<S>().unwrap()
-        })
+        }))
     }
 
-    pub fn get_mut<S: State>(&self) -> RefMut<S> {
-        RefMut::map(self.0[&S::id()].borrow_mut(), |a| {
+    pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
+        let cell = self.0.get(&S::id())?;
+        Some(RefMut::map(cell.borrow_mut(), |a| {
             a.as_any_mut().downcast_mut::<S>().unwrap()
-        })
+        }))
     }
 }
 
@@ -118,7 +120,12 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for ReaderBuilder<S> {
     type Arg = Reader<'c, S>;
 
     fn build(context: &'c Context) -> Reader<'c, S> {
-        Reader(context.states.get())
+        Reader(
+            context
+                .states
+                .get()
+                .unwrap_or_else(|| panic!("StateContainer missing `{}` for Reader", S::id())),
+        )
     }
 }
 
@@ -145,7 +152,11 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for DelayedReaderBuilder<S> {
     type Arg = DelayedReader<'c, S>;
 
     fn build(context: &'c Context) -> DelayedReader<'c, S> {
-        DelayedReader(context.states.get())
+        DelayedReader(
+            context.states.get().unwrap_or_else(|| {
+                panic!("StateContainer missing `{}` for DelayedReader", S::id())
+            }),
+        )
     }
 }
 
@@ -173,7 +184,12 @@ impl<'c, S: State> HandlerFnArgBuilder<'c> for WriterBuilder<S> {
     type Arg = Writer<'c, S>;
 
     fn build(context: &'c Context) -> Writer<'c, S> {
-        Writer(context.states.get_mut())
+        Writer(
+            context
+                .states
+                .get_mut()
+                .unwrap_or_else(|| panic!("StateContainer missing `{}` for Writer", S::id())),
+        )
     }
 }
 

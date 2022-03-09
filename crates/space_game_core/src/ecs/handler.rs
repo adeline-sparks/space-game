@@ -118,7 +118,7 @@ macro_rules! impl_handler_fn {
                         } else {
                             let expected = type_name::<E>();
                             let actual = context.event.type_name();
-                            bail!("Handler expected `{expected}` but was called with `{actual}`")
+                            bail!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
                         }
                     }),
                     name: None,

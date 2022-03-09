@@ -13,6 +13,17 @@ pub enum Dependency {
     PublishTopic(TopicId),
 }
 
+impl Dependency {
+    pub fn state_id(&self) -> Option<&StateId> {
+        match self {
+            Dependency::ReadState(id)
+            | Dependency::ReadStateDelayed(id)
+            | Dependency::WriteState(id) => Some(id),
+            Dependency::SubscribeTopic(_) | Dependency::PublishTopic(_) => None,
+        }
+    }
+}
+
 pub enum ExecutionOrderError {
     WriteConflict(StateId, usize, usize),
     Cyclic(Vec<usize>),
