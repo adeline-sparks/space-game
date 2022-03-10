@@ -99,6 +99,6 @@ impl<'c> HandlerFnArgBuilder<'c> for EventWriterBuilder {
     type Arg = EventWriter<'c>;
 
     fn build(context: &'c Context) -> anyhow::Result<EventWriter<'c>> {
-        Ok(EventWriter(&context.queue))
+        Ok(EventWriter(context.queue))
     }
 }

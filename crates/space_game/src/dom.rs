@@ -79,7 +79,7 @@ pub fn await_event(
     target.add_event_listener_with_callback_and_add_event_listener_options(
         type_,
         &cb,
-        &AddEventListenerOptions::new().once(true),
+        AddEventListenerOptions::new().once(true),
     )?;
     Ok(future)
 }

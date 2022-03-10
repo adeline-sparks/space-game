@@ -9,7 +9,7 @@ pub use event::{AnyEvent, Event, EventWriter};
 pub use handler::{Handler, HandlerFn};
 pub use reactor::{InitEvent, Reactor};
 pub use state::{DelayedReader, Reader, State, StateContainer, Writer};
-pub use topic::{Publisher, Subscriber, Topic};
+pub use topic::{AnyTopic, Publisher, Subscriber, Topic};
 
 #[cfg(test)]
 mod test {

@@ -22,8 +22,7 @@ impl Texture {
         let image = dom::load_image(src).await?;
         let gl = &context.gl;
         let texture = gl
-            .create_texture()
-            .ok_or_else(|| TextureError::CreateTextureFailed)?;
+            .create_texture().ok_or(TextureError::CreateTextureFailed)?;
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
             WebGl2RenderingContext::TEXTURE_2D,

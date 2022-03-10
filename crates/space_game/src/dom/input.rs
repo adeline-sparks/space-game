@@ -28,7 +28,7 @@ impl TryFrom<&KeyboardEvent> for Key {
     type Error = ();
 
     fn try_from(value: &KeyboardEvent) -> Result<Self, Self::Error> {
-        Ok(Key(Cow::from(value.key().clone())))
+        Ok(Key(Cow::from(value.key())))
     }
 }
 

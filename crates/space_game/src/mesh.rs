@@ -106,8 +106,7 @@ impl Mesh {
                 }
 
                 *indices = chunks
-                    .map(|c| [c[0], c[1], c[1], c[2], c[2], c[0]])
-                    .flatten()
+                    .flat_map(|c| [c[0], c[1], c[1], c[2], c[2], c[0]])
                     .collect();
             }
             (PrimitiveType::TRIANGLES, None) => {
@@ -151,7 +150,7 @@ impl Mesh {
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 

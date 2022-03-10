@@ -54,22 +54,17 @@ pub fn marching_cubes(
         }
     }
 
-    let normal_vec: Vec<Vector3<f64>> = pos_vec
+    let normal_vec: Vec<Vector3<f32>> = pos_vec
         .iter()
-        .map(|&pos| sdf.grad(pos).normalize())
+        .map(|&pos| sdf.grad(pos).normalize().cast())
         .collect();
 
     let pos_vec: Vec<Vector3<f32>> = pos_vec.into_iter().map(|v| v.cast()).collect();
-    let normal_vec: Vec<Vector3<f32>> = normal_vec.into_iter().map(|v| v.cast()).collect();
 
     let mut mesh = Mesh::new(PrimitiveType::TRIANGLES);
     mesh.indices = Some(index_vec);
-    mesh.attributes
-        .insert(POSITION, AttributeVec::Vec3(pos_vec));
-    mesh.attributes.insert(
-        NORMAL,
-        AttributeVec::Vec3(normal_vec.into_iter().map(|v| v.cast()).collect()),
-    );
+    mesh.attributes.insert(POSITION, AttributeVec::Vec3(pos_vec));
+    mesh.attributes.insert(NORMAL, AttributeVec::Vec3(normal_vec));
     assert_eq!(mesh.validate(), Ok(()));
     mesh
 }

@@ -63,7 +63,7 @@ impl Shader {
         {
             return Err(ShaderError::LinkError(
                 gl.get_program_info_log(&program)
-                    .unwrap_or("get_program_info_log failed".into()),
+                    .unwrap_or_else(|| "get_program_info_log failed".into()),
             ));
         }
 
@@ -163,43 +163,43 @@ pub trait UniformValue {
 
 impl UniformValue for f32 {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform1f(Some(&loc), *self);
+        gl.uniform1f(Some(loc), *self);
     }
 }
 
 impl UniformValue for Vector2<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform2f(Some(&loc), self.x, self.y);
+        gl.uniform2f(Some(loc), self.x, self.y);
     }
 }
 
 impl UniformValue for Vector3<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform3f(Some(&loc), self.x, self.y, self.z);
+        gl.uniform3f(Some(loc), self.x, self.y, self.z);
     }
 }
 
 impl UniformValue for Vector4<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform4f(Some(&loc), self.x, self.y, self.z, self.w);
+        gl.uniform4f(Some(loc), self.x, self.y, self.z, self.w);
     }
 }
 
 impl UniformValue for Matrix3<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform_matrix3fv_with_f32_array(Some(&loc), false, self.as_slice());
+        gl.uniform_matrix3fv_with_f32_array(Some(loc), false, self.as_slice());
     }
 }
 
 impl UniformValue for Matrix4<f32> {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform_matrix4fv_with_f32_array(Some(&loc), false, self.as_slice());
+        gl.uniform_matrix4fv_with_f32_array(Some(loc), false, self.as_slice());
     }
 }
 
 impl UniformValue for i32 {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform1i(Some(&loc), *self);
+        gl.uniform1i(Some(loc), *self);
     }
 }
 
@@ -207,6 +207,6 @@ pub struct Sampler2D(pub u32);
 
 impl UniformValue for Sampler2D {
     fn set_uniform(&self, gl: &WebGl2RenderingContext, loc: &WebGlUniformLocation) {
-        gl.uniform1i(Some(&loc), self.0 as i32);
+        gl.uniform1i(Some(loc), self.0 as i32);
     }
 }
