@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 
+use log::error;
 use thiserror::Error;
 
 use super::dependency::execution_order;
@@ -9,8 +10,9 @@ use super::handler::{Context, Handler, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
-pub struct InitState;
-impl Event for InitState {}
+#[derive(Debug)]
+pub struct InitEvent;
+impl Event for InitEvent {}
 
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
@@ -47,7 +49,7 @@ impl Reactor {
                 .collect::<HashSet<_>>(),
         );
 
-        self.dispatch(&states, InitState);
+        self.dispatch(&states, InitEvent);
         states
     }
 
@@ -67,7 +69,9 @@ impl Reactor {
                 for h in handlers {
                     match h.call(&context) {
                         Ok(()) => {}
-                        Err(err) => panic!("Error in handler {}: {}", h, err),
+                        Err(err) => {
+                            error!("Handler '{}' failed while handling {:?}: {}", h, event, err)
+                        }
                     }
                 }
             }

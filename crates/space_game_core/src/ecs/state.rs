@@ -6,6 +6,8 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+use anyhow::format_err;
+
 use super::dependency::Dependency;
 use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
 
@@ -119,13 +121,13 @@ pub struct ReaderBuilder<S>(PhantomData<S>);
 impl<'c, S: State> HandlerFnArgBuilder<'c> for ReaderBuilder<S> {
     type Arg = Reader<'c, S>;
 
-    fn build(context: &'c Context) -> Reader<'c, S> {
-        Reader(
-            context
-                .states
-                .get()
-                .unwrap_or_else(|| panic!("StateContainer missing `{}` for Reader", S::id())),
-        )
+    fn build(context: &'c Context) -> anyhow::Result<Reader<'c, S>> {
+        let s = context
+            .states
+            .get()
+            .ok_or_else(|| format_err!("Missing state `{}` for Reader", S::id()))?;
+
+        Ok(Reader(s))
     }
 }
 
@@ -151,12 +153,13 @@ pub struct DelayedReaderBuilder<S>(PhantomData<S>);
 impl<'c, S: State> HandlerFnArgBuilder<'c> for DelayedReaderBuilder<S> {
     type Arg = DelayedReader<'c, S>;
 
-    fn build(context: &'c Context) -> DelayedReader<'c, S> {
-        DelayedReader(
-            context.states.get().unwrap_or_else(|| {
-                panic!("StateContainer missing `{}` for DelayedReader", S::id())
-            }),
-        )
+    fn build(context: &'c Context) -> anyhow::Result<DelayedReader<'c, S>> {
+        let s = context
+            .states
+            .get()
+            .ok_or_else(|| format_err!("Missing state `{}` for ReaderDelayed", S::id()))?;
+
+        Ok(DelayedReader(s))
     }
 }
 
@@ -183,13 +186,13 @@ pub struct WriterBuilder<S>(PhantomData<S>);
 impl<'c, S: State> HandlerFnArgBuilder<'c> for WriterBuilder<S> {
     type Arg = Writer<'c, S>;
 
-    fn build(context: &'c Context) -> Writer<'c, S> {
-        Writer(
-            context
-                .states
-                .get_mut()
-                .unwrap_or_else(|| panic!("StateContainer missing `{}` for Writer", S::id())),
-        )
+    fn build(context: &'c Context) -> anyhow::Result<Writer<'c, S>> {
+        let s = context
+            .states
+            .get_mut()
+            .ok_or_else(|| format_err!("Missing state `{}` for Writer", S::id()))?;
+
+        Ok(Writer(s))
     }
 }
 

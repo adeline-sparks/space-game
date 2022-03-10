@@ -26,8 +26,8 @@ impl AnyTopic {
         self.0.type_id()
     }
 
-    pub fn downcast<'a, T: Topic>(&'a self) -> &'a T {
-        self.0.downcast_ref().unwrap() // TODO
+    pub fn downcast<'a, T: Topic>(&'a self) -> Option<&'a T> {
+        self.0.downcast_ref()
     }
 }
 
@@ -53,7 +53,9 @@ impl TopicContainer {
             return None;
         }
 
-        Some(Ref::map(self.0.borrow(), |m| m[&tid][idx].downcast::<T>()))
+        Some(Ref::map(self.0.borrow(), |m| {
+            m[&tid][idx].downcast::<T>().unwrap()
+        }))
     }
 
     pub fn clear(&self) {
@@ -84,8 +86,8 @@ pub struct PublisherBuilder<T>(PhantomData<T>);
 impl<'c, T: Topic> HandlerFnArgBuilder<'c> for PublisherBuilder<T> {
     type Arg = Publisher<'c, T>;
 
-    fn build(context: &'c Context) -> Self::Arg {
-        Publisher(&context.topics, PhantomData)
+    fn build(context: &'c Context) -> anyhow::Result<Publisher<'c, T>> {
+        Ok(Publisher(&context.topics, PhantomData))
     }
 }
 
@@ -110,7 +112,7 @@ pub struct SubscriberBuilder<T>(PhantomData<T>);
 impl<'c, T: Topic> HandlerFnArgBuilder<'c> for SubscriberBuilder<T> {
     type Arg = Subscriber<'c, T>;
 
-    fn build(context: &'c Context) -> Subscriber<'c, T> {
-        Subscriber(&context.topics, PhantomData)
+    fn build(context: &'c Context) -> anyhow::Result<Subscriber<'c, T>> {
+        Ok(Subscriber(&context.topics, PhantomData))
     }
 }

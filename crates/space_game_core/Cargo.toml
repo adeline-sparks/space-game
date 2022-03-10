@@ -11,3 +11,4 @@ nalgebra = { version = "0.30" }
 anyhow = {version = "1", features = ["backtrace"] }
 thiserror = "1"
 impl-trait-for-tuples = "0.2.2"
+log = "0.4"

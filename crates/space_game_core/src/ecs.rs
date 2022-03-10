@@ -7,7 +7,7 @@ mod topic;
 
 pub use event::{AnyEvent, Event, EventWriter};
 pub use handler::{Handler, HandlerFn};
-pub use reactor::{InitState, Reactor};
+pub use reactor::{InitEvent, Reactor};
 pub use state::{DelayedReader, Reader, State, StateContainer, Writer};
 pub use topic::{Publisher, Subscriber, Topic};
 
@@ -27,6 +27,7 @@ mod test {
         struct MyStateCopy(MyState);
         impl State for MyStateCopy {}
 
+        #[derive(Debug)]
         struct MyEvent {
             counter: usize,
         }

@@ -2,6 +2,7 @@ use std::any::type_name;
 use std::fmt::{Debug, Display};
 use std::panic::Location;
 
+use anyhow::bail;
 use impl_trait_for_tuples::impl_for_tuples;
 
 use super::dependency::Dependency;
@@ -83,7 +84,7 @@ pub trait HandlerFnArg {
 pub trait HandlerFnArgBuilder<'c> {
     type Arg: HandlerFnArg;
 
-    fn build(context: &'c Context) -> Self::Arg;
+    fn build(context: &'c Context) -> anyhow::Result<Self::Arg>;
 }
 
 macro_rules! impl_handler_fn {
@@ -113,11 +114,11 @@ macro_rules! impl_handler_fn {
                     },
                     fn_box: Box::new(move |context| {
                         if let Some(event) = context.event.downcast() {
-                            make_fn(&self)(event, $($Args::Builder::build(context),)*)
+                            make_fn(&self)(event, $($Args::Builder::build(context)?,)*)
                         } else {
                             let expected = type_name::<E>();
                             let actual = context.event.type_name();
-                            panic!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
+                            bail!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
                         }
                     }),
                     name: None,
@@ -150,7 +151,7 @@ impl<'c> HandlerFnArgBuilder<'c> for Tuple {
 
     for_tuples!(type Arg = (#(Tuple::Arg),*); );
 
-    fn build(context: &'c Context) -> Self::Arg {
-        for_tuples!((#(Tuple::build(context)),*))
+    fn build(context: &'c Context) -> anyhow::Result<Self::Arg> {
+        Ok(for_tuples!((#(Tuple::build(context)?),*)))
     }
 }

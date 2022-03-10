@@ -1,11 +1,12 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::fmt::{self, Debug, Formatter};
 
 use super::dependency::Dependency;
 use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Event: 'static {
+pub trait Event: Debug + 'static {
     fn id() -> EventId {
         EventId(TypeId::of::<Self>())
     }
@@ -14,24 +15,50 @@ pub trait Event: 'static {
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct EventId(TypeId);
 
-pub struct AnyEvent(Box<dyn Any>, &'static str);
+pub struct AnyEvent(Box<dyn AnyEventInner>);
+
+pub trait AnyEventInner {
+    fn as_any(&self) -> &dyn Any;
+    fn type_name(&self) -> &'static str;
+    fn debug_fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error>;
+}
+
+impl<E: Event + Sized> AnyEventInner for E {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn type_name(&self) -> &'static str {
+        type_name::<E>()
+    }
+
+    fn debug_fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Debug::fmt(self, f)
+    }
+}
 
 impl AnyEvent {
     pub fn new<E: Event>(ev: E) -> Self {
-        Self(Box::new(ev), type_name::<E>())
+        Self(Box::new(ev))
     }
 
     pub fn id(&self) -> EventId {
-        EventId(self.0.type_id())
+        EventId(self.0.as_any().type_id())
     }
 
     pub fn type_name(&self) -> &'static str {
-        self.1
+        self.0.type_name()
     }
 
     #[track_caller]
     pub fn downcast<E: Event>(&self) -> Option<&E> {
-        self.0.downcast_ref()
+        self.0.as_any().downcast_ref()
+    }
+}
+
+impl Debug for AnyEvent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.debug_fmt(f)
     }
 }
 
@@ -71,7 +98,7 @@ pub struct EventWriterBuilder;
 impl<'c> HandlerFnArgBuilder<'c> for EventWriterBuilder {
     type Arg = EventWriter<'c>;
 
-    fn build(context: &'c Context) -> EventWriter<'c> {
-        EventWriter(&context.queue)
+    fn build(context: &'c Context) -> anyhow::Result<EventWriter<'c>> {
+        Ok(EventWriter(&context.queue))
     }
 }
