@@ -3,8 +3,8 @@ use nalgebra::{Vector2, Vector3};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlBuffer, WebGlVertexArrayObject};
 
-use main::gl::{webgl_scalar_count, webgl_scalar_type, Context};
-use main::mesh::{Attribute, AttributeVec, Mesh, MeshError, PrimitiveType};
+use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
+use crate::mesh::{Attribute, AttributeVec, Mesh, MeshError, PrimitiveType};
 
 pub struct Vao {
     gl: WebGl2RenderingContext,
