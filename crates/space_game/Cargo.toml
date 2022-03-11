@@ -35,6 +35,7 @@ features = [
   'HtmlCanvasElement',
   'HtmlImageElement',
   'KeyboardEvent',
+  'Location',
   'MouseEvent',
   'WebGlBuffer',
   'WebGlVertexArrayObject',

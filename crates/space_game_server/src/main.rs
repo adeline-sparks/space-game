@@ -40,7 +40,7 @@ async fn main() {
             )
         });
     let app = Router::new()
-        .route("/ws/v1", handle_ws)
+        .route("/api/v1/ws", handle_ws)
         .fallback(serve_space_game);
     axum::Server::bind(&args.addr)
         .serve(app.into_make_service())

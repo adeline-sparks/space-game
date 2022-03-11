@@ -1,0 +1,3 @@
+[[proxy]]
+backend = "ws://localhost:8000/api/v1/ws"
+ws = true

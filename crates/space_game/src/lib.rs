@@ -67,8 +67,8 @@ async fn main_render() -> anyhow::Result<()> {
     let input = InputEventListener::from_canvas("space_game")?;
     let context = Context::from_canvas("space_game")?;
 
-    let color_texture = Texture::load(&context, "ground_0010_base_color_2k.jpg").await?;
-    let normal_texture = Texture::load(&context, "ground_0010_normal_2k.jpg").await?;
+    let color_texture = Texture::load(&context, "res/ground_0010_base_color_2k.jpg").await?;
+    let normal_texture = Texture::load(&context, "res/ground_0010_normal_2k.jpg").await?;
 
     let attributes = &[
         Attribute {
@@ -262,7 +262,8 @@ async fn animation_frame_seconds() -> Result<f64, DomError> {
 
 async fn main_net() -> anyhow::Result<()> {
     info!("Creating websocket");
-    let ws = open_websocket("ws://localhost:8000/ws/v1").await?;
+    let host = dom::get_host()?;
+    let ws = open_websocket(&format!("ws://{host}/api/v1/ws")).await?;
     info!("Websocket connected");
     ws.send_with_str("Hello World").map_err(DomError::from)?;
     Ok(())

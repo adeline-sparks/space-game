@@ -7,7 +7,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{
     console, AddEventListenerOptions, BinaryType, Document, EventTarget, HtmlCanvasElement,
-    HtmlImageElement, WebSocket, Window,
+    HtmlImageElement, WebSocket, Window, 
 };
 
 mod input;
@@ -21,6 +21,8 @@ pub enum DomError {
     DocumentMissing,
     #[error("Global `window` missing")]
     WindowMissing,
+    #[error("Global `location` missing")]
+    LocationMissing,
     #[error("Caught exception")]
     CaughtException,
     #[error("Image load failed")]
@@ -106,6 +108,13 @@ pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, DomError> {
         .get_element_by_id(element_id)
         .ok_or_else(|| DomError::ElementNotFound(element_id.into()))?
         .unchecked_into::<web_sys::HtmlCanvasElement>())
+}
+
+pub fn get_host() -> Result<String, DomError> {
+    Ok(document()?
+       .location()
+       .ok_or(DomError::LocationMissing)?
+       .host()?)
 }
 
 fn window() -> Result<Window, DomError> {
