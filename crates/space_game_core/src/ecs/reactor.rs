@@ -1,3 +1,5 @@
+//! `Reactor` and related types.
+
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 
@@ -15,17 +17,28 @@ use super::handler::{Context, Handler, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
+/// `Event` which is fired at init time, which [`Handler`]s can use to initialize their state.
 #[derive(Debug)]
 pub struct InitEvent;
 impl Event for InitEvent {}
 
+/// Stores a set of [`Handler`]s and executes them in response to [`Event`]s.
+/// 
+/// `Handler`s are able to emit their own `Events`, which are dispatched 
+/// similarly after the initial `Event`. If the `Handler` returns an error while 
+/// handling any `Event`, it is logged but dispatch of that `Event` continues.
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
 impl Reactor {
+    /// Begin constructing a `Reactor` via [`ReactorBuilder`].
     pub fn builder() -> ReactorBuilder {
         ReactorBuilder::default()
     }
 
+    /// Create a fresh [`StateContainer`] for use with this `Reactor`. 
+    ///
+    /// This will automatically dispatch an [`InitEvent`] so that handlers
+    /// can initialize their state.
     pub fn new_state_container(&self) -> StateContainer {
         let states = StateContainer::new(
             self.0
@@ -40,6 +53,7 @@ impl Reactor {
         states
     }
 
+    /// Dispatch an event to all handlers and update the `states`.
     pub fn dispatch<E: Event>(&self, states: &StateContainer, event: E) {
         let topics = TopicContainer::new();
 
@@ -63,7 +77,7 @@ impl Reactor {
                 match h.call(&context) {
                     Ok(()) => {}
                     Err(err) => {
-                        error!("Handler '{}' failed while handling {:?}: {}", h, event, err)
+                        error!("Handler '{}' failed while handling {:?}: {}", h, event, err);
                     }
                 }
             }
@@ -71,21 +85,26 @@ impl Reactor {
     }
 }
 
+/// Builder type for [`Reactor`].
 #[derive(Default)]
 pub struct ReactorBuilder(Vec<Handler>);
 
+/// Errors which can occur while building the reactor.
 #[derive(Error, Debug)]
 pub enum BuildReactorError {
+    /// Indicates that the handlers for the given [`EventId`] have a circular dependency.
     #[error("While processing {0}: {1}")]
-    Cycle(EventId, CyclicDependenciesError),
+    Cycle(EventId, #[source] CyclicDependenciesError),
 }
 
 impl ReactorBuilder {
+    /// Add a handler function to the ReactorBuilder. See [`HandlerFn`].
     pub fn add<E: Event, Args>(mut self, f: impl HandlerFn<E, Args>) -> Self {
         self.0.push(f.into_handler());
         self
     }
 
+    /// Build the [`Reactor`].
     pub fn build(self) -> Result<Reactor, BuildReactorError> {
         let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
         for handler in self.0 {
@@ -104,6 +123,7 @@ impl ReactorBuilder {
     }
 }
 
+/// Indicates that a cyclic dependency was found. Each `String` describes a participant in the cycle.
 #[derive(Error, Debug)]
 pub struct CyclicDependenciesError(Vec<String>);
 
@@ -121,21 +141,33 @@ impl Display for CyclicDependenciesError {
     }
 }
 
+/// Re-arranges `handlers` in-place to build a topographical order suitable for dispatch.
 fn sort_handlers_by_execution_order(
     handlers: &mut Vec<Handler>,
 ) -> Result<(), CyclicDependenciesError> {
+    /// Node type for the dependency graph.
     enum Node {
+        /// Node represents the handler at the given index in `handlers`.
         Handler(usize),
+        /// Node represents a `State`.
         State(StateId),
+        /// Node represents a `Topic`.
         Topic(TopicId),
     }
 
+    // First, we construct the nodes of the graph. As we go, populate `HashMap`s for fast 
+    // retrieval of nodes their ID.
     let mut graph = DiGraph::<Node, ()>::new();
     let mut handler_nodes = Vec::new();
     let mut state_nodes = HashMap::new();
     let mut topic_nodes = HashMap::new();
 
     for (idx, handler) in handlers.iter().enumerate() {
+        // Build a node for this handler.
+        handler_nodes.push(graph.add_node(Node::Handler(idx)));
+
+        // Check each dependency and build nodes if they refer to things
+        // we don't already have nodes for.
         for dep in handler.dependencies() {
             match dep {
                 Dependency::ReadState(id)
@@ -152,10 +184,9 @@ fn sort_handlers_by_execution_order(
                 }
             }
         }
-
-        handler_nodes.push(graph.add_node(Node::Handler(idx)));
     }
 
+    // Next, populate incoming and outgoing edges for each handler. Edges point from dependee to dependency.
     for &handler_node in &handler_nodes {
         let handler = match &graph[handler_node] {
             &Node::Handler(idx) => &handlers[idx],
@@ -165,27 +196,32 @@ fn sort_handlers_by_execution_order(
         for dep in handler.dependencies() {
             match dep {
                 Dependency::ReadState(id) => {
-                    graph.add_edge(state_nodes[id], handler_node, ());
-                }
-                Dependency::ReadStateDelayed(id) | Dependency::WriteState(id) => {
                     graph.add_edge(handler_node, state_nodes[id], ());
                 }
+                Dependency::ReadStateDelayed(id) | Dependency::WriteState(id) => {
+                    graph.add_edge(state_nodes[id], handler_node, ());
+                }
                 Dependency::SubscribeTopic(id) => {
-                    graph.add_edge(topic_nodes[id], handler_node, ());
+                    graph.add_edge(handler_node, topic_nodes[id], ());
                 }
                 Dependency::PublishTopic(id) => {
-                    graph.add_edge(handler_node, topic_nodes[id], ());
+                    graph.add_edge(topic_nodes[id], handler_node, ());
                 }
             }
         }
     }
 
-    let mut sccs = kosaraju_scc(&graph);
-    sccs.reverse();
+    // Find strongly connected components for the graph in reverse topological order.
+    let sccs_rev_topo = kosaraju_scc(&graph);
 
+    // Drain the handlers vec into a temporary we can take from.
     let mut handlers_temp = handlers.drain(..).map(Some).collect::<Vec<_>>();
-    for scc in sccs {
+
+    // Scan each component.
+    for scc in sccs_rev_topo {
+        // If there are multiple nodes in the strongly connected component, they form a cycle.
         if scc.len() > 1 {
+            // Return an error describing the cycle.
             let names = scc
                 .iter()
                 .map(|&node| match &graph[node] {
@@ -198,13 +234,11 @@ fn sort_handlers_by_execution_order(
             return Err(CyclicDependenciesError(names));
         }
 
-        let idx = match &graph[scc[0]] {
-            &Node::Handler(idx) => idx,
-            _ => continue,
-        };
-
-        handlers.push(handlers_temp[idx].take().expect("Node appears in two SCCs"));
+        // Append handlers to our output by taking them from the temporary storage.
+        if let &Node::Handler(idx) = &graph[scc[0]] {
+            handlers.push(handlers_temp[idx].take().expect("Node appears in two SCCs"));
+        }
     }
-
+ 
     Ok(())
 }
