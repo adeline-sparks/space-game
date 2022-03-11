@@ -40,9 +40,11 @@ impl Display for TopicId {
     }
 }
 
+/// Dynamically-typed container for types that implement [`Event`].
 pub struct AnyTopic(Box<dyn AnyTopicInner>);
 
-pub trait AnyTopicInner {
+/// Object-safe trait used inside [`AnyTopic`].
+trait AnyTopicInner {
     fn as_any(&self) -> &dyn Any;
     fn id(&self) -> TopicId;
     fn debug_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result;

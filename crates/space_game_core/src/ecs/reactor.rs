@@ -1,4 +1,4 @@
-//! `Reactor` and related types.
+//! [`Reactor`] and related types.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -23,9 +23,9 @@ pub struct InitEvent;
 impl Event for InitEvent {}
 
 /// Stores a set of [`Handler`]s and executes them in response to [`Event`]s.
-/// 
-/// `Handler`s are able to emit their own `Events`, which are dispatched 
-/// similarly after the initial `Event`. If the `Handler` returns an error while 
+///
+/// `Handler`s are able to emit their own `Events`, which are dispatched
+/// similarly after the initial `Event`. If the `Handler` returns an error while
 /// handling any `Event`, it is logged but dispatch of that `Event` continues.
 pub struct Reactor(HashMap<EventId, Vec<Handler>>);
 
@@ -35,7 +35,7 @@ impl Reactor {
         ReactorBuilder::default()
     }
 
-    /// Create a fresh [`StateContainer`] for use with this `Reactor`. 
+    /// Create a fresh [`StateContainer`] for use with this `Reactor`.
     ///
     /// This will automatically dispatch an [`InitEvent`] so that handlers
     /// can initialize their state.
@@ -155,7 +155,7 @@ fn sort_handlers_by_execution_order(
         Topic(TopicId),
     }
 
-    // First, we construct the nodes of the graph. As we go, populate `HashMap`s for fast 
+    // First, we construct the nodes of the graph. As we go, populate `HashMap`s for fast
     // retrieval of nodes their ID.
     let mut graph = DiGraph::<Node, ()>::new();
     let mut handler_nodes = Vec::new();
@@ -239,6 +239,6 @@ fn sort_handlers_by_execution_order(
             handlers.push(handlers_temp[idx].take().expect("Node appears in two SCCs"));
         }
     }
- 
+
     Ok(())
 }

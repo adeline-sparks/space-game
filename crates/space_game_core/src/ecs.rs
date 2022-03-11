@@ -1,6 +1,5 @@
 //! TODO
 
-#[allow(clippy::missing_docs_in_private_items)]
 mod event;
 
 #[allow(clippy::missing_docs_in_private_items)]
@@ -8,7 +7,6 @@ mod handler;
 
 mod reactor;
 
-#[allow(clippy::missing_docs_in_private_items)]
 mod state;
 
 #[allow(clippy::missing_docs_in_private_items)]
