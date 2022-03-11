@@ -8,8 +8,7 @@ use std::ops::{Deref, DerefMut};
 
 use anyhow::format_err;
 
-use super::dependency::Dependency;
-use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
+use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
 #[derive(Eq, Clone, Debug)]
 pub struct StateId {

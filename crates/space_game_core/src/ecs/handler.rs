@@ -1,14 +1,12 @@
-use std::any::type_name;
 use std::fmt::{Debug, Display};
 use std::panic::Location;
 
 use anyhow::bail;
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::dependency::Dependency;
 use super::event::{AnyEvent, Event, EventId, EventQueue};
-use super::state::StateContainer;
-use super::topic::TopicContainer;
+use super::state::{StateContainer, StateId};
+use super::topic::{TopicContainer, TopicId};
 
 pub struct Handler {
     event_id: EventId,
@@ -16,6 +14,32 @@ pub struct Handler {
     fn_box: Box<dyn Fn(&Context) -> anyhow::Result<()>>,
     name: Option<String>,
     location: Location<'static>,
+}
+
+/// Represents a dependency that a `Handler` can have.
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum Dependency {
+    /// Dependency on reading from a `State`.
+    ReadState(StateId),
+    /// Dependency on reading from a `State` with one cycle delay.
+    ReadStateDelayed(StateId),
+    /// Dependency on writing to a `State`.
+    WriteState(StateId),
+    /// Dependency on subscribing to a `Topic`.
+    SubscribeTopic(TopicId),
+    /// Dependency on publishing to a `Topic`.
+    PublishTopic(TopicId),
+}
+
+impl Dependency {
+    pub fn state_id(&self) -> Option<&StateId> {
+        match self {
+            Dependency::ReadState(id)
+            | Dependency::ReadStateDelayed(id)
+            | Dependency::WriteState(id) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 impl Debug for Handler {
@@ -116,8 +140,8 @@ macro_rules! impl_handler_fn {
                         if let Some(event) = context.event.downcast() {
                             make_fn(&self)(event, $($Args::Builder::build(context)?,)*)
                         } else {
-                            let expected = type_name::<E>();
-                            let actual = context.event.type_name();
+                            let expected = E::id();
+                            let actual = context.event.id();
                             bail!("Handler called with invalid event: expected `{expected}` but given `{actual}`")
                         }
                     }),

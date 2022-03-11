@@ -1,19 +1,44 @@
-use std::any::{Any, TypeId};
+use std::any::{type_name, Any, TypeId};
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
 use std::marker::PhantomData;
 
-use super::dependency::Dependency;
-use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
+use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
 pub trait Topic: 'static {
     fn id() -> TopicId {
-        TopicId(TypeId::of::<Self>())
+        TopicId {
+            id: TypeId::of::<Self>(),
+            name: type_name::<Self>(),
+        }
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct TopicId(TypeId);
+#[derive(Eq, Clone, Debug)]
+pub struct TopicId {
+    id: TypeId,
+    name: &'static str,
+}
+
+impl PartialEq for TopicId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Hash for TopicId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl Display for TopicId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name)
+    }
+}
 
 pub struct AnyTopic(Box<dyn Any>);
 
@@ -26,7 +51,7 @@ impl AnyTopic {
         self.0.type_id()
     }
 
-    pub fn downcast<'a, T: Topic>(&'a self) -> Option<&'a T> {
+    pub fn downcast<T: Topic>(&self) -> Option<&T> {
         self.0.downcast_ref()
     }
 }
@@ -87,14 +112,14 @@ impl<'c, T: Topic> HandlerFnArgBuilder<'c> for PublisherBuilder<T> {
     type Arg = Publisher<'c, T>;
 
     fn build(context: &'c Context) -> anyhow::Result<Publisher<'c, T>> {
-        Ok(Publisher(&context.topics, PhantomData))
+        Ok(Publisher(context.topics, PhantomData))
     }
 }
 
 pub struct Subscriber<'t, T: Topic>(&'t TopicContainer, PhantomData<&'t T>);
 
 impl<'t, T: Topic> Subscriber<'t, T> {
-    pub fn iter<'a>(&'a self) -> impl Iterator + 'a {
+    pub fn iter(&self) -> impl Iterator + '_ {
         (0..).into_iter().map_while(move |idx| self.0.get::<T>(idx))
     }
 }
@@ -113,6 +138,6 @@ impl<'c, T: Topic> HandlerFnArgBuilder<'c> for SubscriberBuilder<T> {
     type Arg = Subscriber<'c, T>;
 
     fn build(context: &'c Context) -> anyhow::Result<Subscriber<'c, T>> {
-        Ok(Subscriber(&context.topics, PhantomData))
+        Ok(Subscriber(context.topics, PhantomData))
     }
 }

@@ -1,25 +1,49 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::hash::Hash;
 
-use super::dependency::Dependency;
-use super::handler::{Context, HandlerFnArg, HandlerFnArgBuilder};
+use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
 pub trait Event: Debug + 'static {
     fn id() -> EventId {
-        EventId(TypeId::of::<Self>())
+        EventId {
+            id: TypeId::of::<Self>(),
+            name: type_name::<Self>(),
+        }
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct EventId(TypeId);
+#[derive(Eq, Clone, Debug)]
+pub struct EventId {
+    id: TypeId,
+    name: &'static str,
+}
+
+impl PartialEq for EventId {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Hash for EventId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+impl Display for EventId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name)
+    }
+}
 
 pub struct AnyEvent(Box<dyn AnyEventInner>);
 
 pub trait AnyEventInner {
     fn as_any(&self) -> &dyn Any;
-    fn type_name(&self) -> &'static str;
+    fn id(&self) -> EventId;
     fn debug_fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error>;
 }
 
@@ -28,8 +52,8 @@ impl<E: Event + Sized> AnyEventInner for E {
         self
     }
 
-    fn type_name(&self) -> &'static str {
-        type_name::<E>()
+    fn id(&self) -> EventId {
+        E::id()
     }
 
     fn debug_fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -43,11 +67,7 @@ impl AnyEvent {
     }
 
     pub fn id(&self) -> EventId {
-        EventId(self.0.as_any().type_id())
-    }
-
-    pub fn type_name(&self) -> &'static str {
-        self.0.type_name()
+        self.0.id()
     }
 
     #[track_caller]

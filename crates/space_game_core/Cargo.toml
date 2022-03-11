@@ -12,3 +12,4 @@ anyhow = {version = "1", features = ["backtrace"] }
 thiserror = "1"
 impl-trait-for-tuples = "0.2.2"
 log = "0.4"
+petgraph = "0.6"
