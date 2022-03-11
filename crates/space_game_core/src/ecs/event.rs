@@ -1,7 +1,7 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::{self, Debug, Display};
 use std::hash::Hash;
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
@@ -34,7 +34,7 @@ impl Hash for EventId {
 }
 
 impl Display for EventId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name)
     }
 }
@@ -44,7 +44,7 @@ pub struct AnyEvent(Box<dyn AnyEventInner>);
 pub trait AnyEventInner {
     fn as_any(&self) -> &dyn Any;
     fn id(&self) -> EventId;
-    fn debug_fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error>;
+    fn debug_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result;
 }
 
 impl<E: Event + Sized> AnyEventInner for E {
@@ -56,7 +56,7 @@ impl<E: Event + Sized> AnyEventInner for E {
         E::id()
     }
 
-    fn debug_fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn debug_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(self, f)
     }
 }
@@ -77,7 +77,7 @@ impl AnyEvent {
 }
 
 impl Debug for AnyEvent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.debug_fmt(f)
     }
 }

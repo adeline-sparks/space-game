@@ -10,11 +10,21 @@ use anyhow::format_err;
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
+pub trait State: Clone + Default + 'static {
+    fn id() -> StateId {
+        StateId {
+            id: TypeId::of::<Self>(),
+            name: type_name::<Self>(),
+            default_fn: || AnyState::new(Self::default()),
+        }
+    }
+}
+
 #[derive(Eq, Clone, Debug)]
 pub struct StateId {
     id: TypeId,
     name: &'static str,
-    default_fn: fn() -> Box<dyn AnyState>,
+    default_fn: fn() -> AnyState,
 }
 
 impl PartialEq for StateId {
@@ -35,24 +45,59 @@ impl Display for StateId {
     }
 }
 
-pub trait State: Clone + Default + 'static {
-    fn id() -> StateId {
-        StateId {
-            id: TypeId::of::<Self>(),
-            name: type_name::<Self>(),
-            default_fn: || Box::new(Self::default()),
-        }
+pub struct AnyState(Box<dyn AnyStateInner>);
+
+pub trait AnyStateInner {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn id(&self) -> StateId;
+    fn clone_any(&self) -> AnyState;
+}
+
+impl<S: State + Sized> AnyStateInner for S {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn id(&self) -> StateId {
+        S::id()
+    }
+
+    fn clone_any(&self) -> AnyState {
+        AnyState(Box::new(self.clone()))
+    }
+}
+
+impl AnyState {
+    pub fn new<S: State>(s: S) -> AnyState {
+        AnyState(Box::new(s))
+    }
+
+    pub fn id(&self) -> StateId {
+        self.0.id()
+    }
+
+    pub fn downcast<S: State>(&self) -> Option<&S> {
+        self.0.as_any().downcast_ref()
+    }
+
+    pub fn downcast_mut<S: State>(&mut self) -> Option<&mut S> {
+        self.0.as_any_mut().downcast_mut()
+    }
+}
+
+impl Clone for AnyState {
+    fn clone(&self) -> Self {
+        self.0.clone_any()
     }
 }
 
 #[derive(Default)]
-pub struct StateContainer(HashMap<StateId, RefCell<Box<dyn AnyState>>>);
-
-pub trait AnyState: Any + 'static {
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-    fn clone_box(&self) -> Box<dyn AnyState>;
-}
+pub struct StateContainer(HashMap<StateId, RefCell<AnyState>>);
 
 impl StateContainer {
     pub fn new(ids: impl IntoIterator<Item = StateId>) -> StateContainer {
@@ -68,41 +113,14 @@ impl StateContainer {
 
     pub fn get<S: State>(&self) -> Option<Ref<S>> {
         let cell = self.0.get(&S::id())?;
-        Some(Ref::map(cell.borrow(), |a| {
-            a.as_any().downcast_ref::<S>().unwrap()
-        }))
+        Some(Ref::map(cell.borrow(), |a| a.downcast::<S>().unwrap()))
     }
 
     pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
         let cell = self.0.get(&S::id())?;
         Some(RefMut::map(cell.borrow_mut(), |a| {
-            a.as_any_mut().downcast_mut::<S>().unwrap()
+            a.downcast_mut::<S>().unwrap()
         }))
-    }
-}
-
-impl Clone for StateContainer {
-    fn clone(&self) -> Self {
-        StateContainer(
-            self.0
-                .iter()
-                .map(|(id, r)| (id.clone(), RefCell::new(r.borrow().clone_box())))
-                .collect(),
-        )
-    }
-}
-
-impl<S: Any + State> AnyState for S {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn AnyState> {
-        Box::new(self.clone())
     }
 }
 

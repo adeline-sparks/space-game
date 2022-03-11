@@ -1,13 +1,13 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::hash::Hash;
+use std::fmt::{self, Debug, Display};
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 use super::handler::{Context, Dependency, HandlerFnArg, HandlerFnArgBuilder};
 
-pub trait Topic: 'static {
+pub trait Topic: Debug + 'static {
     fn id() -> TopicId {
         TopicId {
             id: TypeId::of::<Self>(),
@@ -29,30 +29,56 @@ impl PartialEq for TopicId {
 }
 
 impl Hash for TopicId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }
 
 impl Display for TopicId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name)
     }
 }
 
-pub struct AnyTopic(Box<dyn Any>);
+pub struct AnyTopic(Box<dyn AnyTopicInner>);
+
+pub trait AnyTopicInner {
+    fn as_any(&self) -> &dyn Any;
+    fn id(&self) -> TopicId;
+    fn debug_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result;
+}
+
+impl<T: Topic + Sized> AnyTopicInner for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn id(&self) -> TopicId {
+        T::id()
+    }
+
+    fn debug_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
 
 impl AnyTopic {
     pub fn new<T: Topic>(t: T) -> Self {
         Self(Box::new(t))
     }
 
-    pub fn type_id(&self) -> TypeId {
-        self.0.type_id()
+    pub fn id(&self) -> TopicId {
+        self.0.id()
     }
 
     pub fn downcast<T: Topic>(&self) -> Option<&T> {
-        self.0.downcast_ref()
+        self.0.as_any().downcast_ref()
+    }
+}
+
+impl Debug for AnyTopic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.debug_fmt(f)
     }
 }
 
