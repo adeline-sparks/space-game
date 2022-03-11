@@ -7,7 +7,6 @@ use gl::{Context, Sampler2D, Shader, Texture, Vao};
 use log::info;
 use mesh::{Attribute, NORMAL, POSITION};
 use nalgebra::{Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector3};
-use wasm_bindgen::prelude::*;
 
 pub mod dom;
 pub mod gl;
@@ -18,8 +17,7 @@ use voxel::{marching_cubes, SignedDistanceFunction};
 use crate::dom::DomError;
 use crate::mesh::AttributeType;
 
-#[wasm_bindgen(start)]
-pub fn start() {
+pub fn main() {
     console_error_panic_hook::set_once();
     console_log::init().unwrap();
 
