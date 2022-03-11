@@ -1,5 +1,5 @@
 use super::Context;
-use crate::dom::{self, DomError};
+use main::dom::{self, DomError};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlTexture};
 

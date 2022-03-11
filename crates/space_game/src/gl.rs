@@ -3,8 +3,8 @@ use wasm_bindgen::JsCast;
 
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::dom::{self, DomError};
-use crate::mesh::AttributeType;
+use main::dom::{self, DomError};
+use main::mesh::AttributeType;
 
 mod shader;
 mod texture;

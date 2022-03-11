@@ -1,4 +1,4 @@
-use crate::mesh::{AttributeVec, Mesh, PrimitiveType, NORMAL, POSITION};
+use main::mesh::{AttributeVec, Mesh, PrimitiveType, NORMAL, POSITION};
 use nalgebra::Vector3;
 use once_cell::sync::Lazy;
 

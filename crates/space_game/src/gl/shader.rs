@@ -5,9 +5,9 @@ use nalgebra::{Matrix3, Matrix4, Vector2, Vector3, Vector4};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use crate::dom::DomError;
-use crate::gl::{webgl_type, Context};
-use crate::mesh::{Attribute, AttributeName};
+use main::dom::DomError;
+use main::gl::{webgl_type, Context};
+use main::mesh::{Attribute, AttributeName};
 
 pub struct Shader {
     gl: WebGl2RenderingContext,
