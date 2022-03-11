@@ -87,7 +87,7 @@ impl Reactor {
 
 /// Builder type for [`Reactor`].
 #[derive(Default)]
-pub struct ReactorBuilder(Vec<Handler>);
+pub struct ReactorBuilder(HashMap<EventId, Vec<Handler>>);
 
 /// Errors which can occur while building the reactor.
 #[derive(Error, Debug)]
@@ -100,26 +100,18 @@ pub enum BuildReactorError {
 impl ReactorBuilder {
     /// Add a handler function to the ReactorBuilder. See [`HandlerFn`].
     pub fn add<E: Event, Args>(mut self, f: impl HandlerFn<E, Args>) -> Self {
-        self.0.push(f.into_handler());
+        self.0.entry(E::id()).or_default().push(f.into_handler());
         self
     }
 
     /// Build the [`Reactor`].
-    pub fn build(self) -> Result<Reactor, BuildReactorError> {
-        let mut result: HashMap<EventId, Vec<Handler>> = HashMap::new();
-        for handler in self.0 {
-            result
-                .entry(handler.event_id().clone())
-                .or_default()
-                .push(handler);
-        }
-
-        for (event_id, handlers) in result.iter_mut() {
+    pub fn build(mut self) -> Result<Reactor, BuildReactorError> {
+        for (event_id, handlers) in self.0.iter_mut() {
             sort_handlers_by_execution_order(handlers)
                 .map_err(|err| BuildReactorError::Cycle(event_id.clone(), err))?;
         }
 
-        Ok(Reactor(result))
+        Ok(Reactor(self.0))
     }
 }
 

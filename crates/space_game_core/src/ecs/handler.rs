@@ -4,12 +4,11 @@ use std::panic::Location;
 use anyhow::bail;
 use impl_trait_for_tuples::impl_for_tuples;
 
-use super::event::{AnyEvent, Event, EventId, EventQueue};
+use super::event::{AnyEvent, Event, EventQueue};
 use super::state::{StateContainer, StateId};
 use super::topic::{TopicContainer, TopicId};
 
 pub struct Handler {
-    event_id: EventId,
     dependencies: Vec<Dependency>,
     fn_box: Box<dyn Fn(&Context) -> anyhow::Result<()>>,
     name: Option<String>,
@@ -45,7 +44,6 @@ impl Dependency {
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Handler")
-            .field("event_id", &self.event_id)
             .field("dependencies", &self.dependencies)
             .field("fn_box", &())
             .field("name", &self.name)
@@ -73,10 +71,6 @@ pub struct Context<'a> {
 }
 
 impl Handler {
-    pub fn event_id(&self) -> &EventId {
-        &self.event_id
-    }
-
     pub fn dependencies(&self) -> &[Dependency] {
         &*self.dependencies
     }
@@ -129,7 +123,6 @@ macro_rules! impl_handler_fn {
                 }
 
                 Handler {
-                    event_id: E::id(),
                     dependencies: {
                         #[allow(unused_mut)]
                         let mut result = Vec::new();
