@@ -3,6 +3,7 @@ use futures::{select, Future, FutureExt};
 use js_sys::{Function, Promise};
 
 use thiserror::Error;
+use url::{Url, ParseError};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{
@@ -23,12 +24,18 @@ pub enum DomError {
     WindowMissing,
     #[error("Global `location` missing")]
     LocationMissing,
+    #[error("Base URI missing")]
+    BaseUriMissing,
+    #[error("Unknown protocol")]
+    UnknownProtocol,
     #[error("Caught exception")]
     CaughtException,
     #[error("Image load failed")]
     ImageError,
     #[error("WebSocket connection failed")]
     WebSocketError,
+    #[error(transparent)]
+    UrlError(#[from] ParseError)
 }
 
 impl From<JsValue> for DomError {
@@ -64,7 +71,15 @@ pub async fn load_image(src: &str) -> Result<HtmlImageElement, DomError> {
 }
 
 pub async fn open_websocket(url: &str) -> Result<WebSocket, DomError> {
-    let ws = WebSocket::new(url)?;
+    let mut url = Url::parse(url)?;
+    let scheme = match url.scheme() {
+        "http" => "ws",
+        "https" => "wss",
+        _ => return Err(DomError::UnknownProtocol),
+    };
+    url.set_scheme(scheme).map_err(|()| DomError::UnknownProtocol)?;
+
+    let ws = WebSocket::new(url.as_str())?;
     ws.set_binary_type(BinaryType::Arraybuffer);
 
     select! {
@@ -92,7 +107,7 @@ fn make_callback_future() -> (Function, impl FusedFuture<Output = JsValue>) {
         resolve_opt = Some(resolve);
     }));
 
-    (resolve_opt.unwrap(), async { future.await.unwrap() }.fuse())
+    (resolve_opt.unwrap(), future.map(|v| v.unwrap()).fuse())
 }
 
 pub fn spawn(fut: impl Future<Output = anyhow::Result<()>> + 'static) {
@@ -110,11 +125,12 @@ pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, DomError> {
         .unchecked_into::<web_sys::HtmlCanvasElement>())
 }
 
-pub fn get_host() -> Result<String, DomError> {
-    Ok(document()?
-       .location()
-       .ok_or(DomError::LocationMissing)?
-       .host()?)
+pub fn get_base_uri() -> Result<Url, DomError> {
+    let s = document()?
+        .base_uri()?
+        .ok_or(DomError::BaseUriMissing)?;
+
+    Ok(Url::parse(&s)?)
 }
 
 fn window() -> Result<Window, DomError> {

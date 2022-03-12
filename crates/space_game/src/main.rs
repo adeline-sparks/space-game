@@ -260,8 +260,9 @@ async fn animation_frame_seconds() -> Result<f64, DomError> {
 
 async fn main_net() -> anyhow::Result<()> {
     info!("Creating websocket");
-    let host = dom::get_host()?;
-    let ws = open_websocket(&format!("ws://{host}/api/v1/ws")).await?;
+    let base = dom::get_base_uri()?;
+    
+    let ws = open_websocket(&format!("{base}api/v1/ws")).await?;
     info!("Websocket connected");
     ws.send_with_str("Hello World").map_err(DomError::from)?;
     Ok(())
