@@ -13,7 +13,7 @@ use crate::ecs::state::StateId;
 use crate::ecs::topic::TopicId;
 
 use super::event::{AnyEvent, Event, EventId, EventQueue};
-use super::handler::{Context, Handler, HandlerFn};
+use super::handler::{Context, Handler, EventHandlerFn, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
@@ -92,7 +92,12 @@ impl Reactor {
 
 /// Builder type for [`Reactor`].
 #[derive(Default)]
-pub struct ReactorBuilder(HashMap<EventId, Vec<Handler>>);
+pub struct ReactorBuilder {
+    /// Handlers to dispatch in response to any event.
+    global_handlers: Vec<Handler>,
+    /// Handlers to dispatch in response to a specific event.
+    event_handlers: HashMap<EventId, Vec<Handler>>,
+}
 
 /// Errors which can occur while building the reactor.
 #[derive(Error, Debug)]
@@ -103,30 +108,45 @@ pub enum BuildReactorError {
 }
 
 impl ReactorBuilder {
-    /// Add a handler function to the ReactorBuilder. See [`HandlerFn`].
-    pub fn add<E: Event, Args>(mut self, f: impl HandlerFn<E, Args>) -> Self {
-        self.0.entry(E::id()).or_default().push(f.into_handler());
+    /// TODO
+    pub fn add<E: Event, Args>(mut self, f: impl EventHandlerFn<E, Args>) -> Self {
+        self.event_handlers.entry(E::id()).or_default().push(f.into_handler());
+        self
+    }
+
+    /// TODO
+    pub fn add_global<Args>(mut self, f: impl HandlerFn<Args>) -> Self {
+        self.global_handlers.push(f.into_handler());
         self
     }
 
     /// Build the [`Reactor`].
     pub fn build(self) -> Result<Reactor, BuildReactorError> {
-        let mut handlers = Vec::new();
         let mut event_dispatch_order = HashMap::new();
-        for (event_id, event_handlers) in self.0 {
-            let all_event_handlers = event_handlers.iter().collect::<Vec<_>>();
+        for (event_id, handlers) in &self.event_handlers {
+            let all_handlers = 
+                self.global_handlers
+                    .iter()
+                    .chain(handlers)
+                    .collect::<Vec<_>>();
+
             let mut order = 
-                compute_execution_order(&all_event_handlers)
+                compute_execution_order(&all_handlers)
                 .map_err(|err| BuildReactorError::Cycle(event_id.clone(), err))?;
             
-            let offset = all_event_handlers.len();
+            let offset = all_handlers.len();
+            let end_of_global_handlers = self.global_handlers.len();
             for idx in &mut order {
-                *idx += offset;
+                if *idx >= end_of_global_handlers {
+                    *idx += offset;
+                }
             }
-            handlers.extend(event_handlers);
-            event_dispatch_order.insert(event_id, order);
+            event_dispatch_order.insert(event_id.clone(), order);
         }
 
+        let mut handlers = self.global_handlers;
+        handlers.extend(self.event_handlers.into_values().flatten());
+        
         Ok(Reactor { handlers, event_dispatch_order })
     }
 }

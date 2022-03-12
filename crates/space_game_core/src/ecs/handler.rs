@@ -88,7 +88,12 @@ impl Handler {
     }
 }
 
-pub trait HandlerFn<E, Args> {
+pub trait EventHandlerFn<E, Args> {
+    #[track_caller]
+    fn into_handler(self) -> Handler;
+}
+
+pub trait HandlerFn<Args> {
     #[track_caller]
     fn into_handler(self) -> Handler;
 }
@@ -107,7 +112,37 @@ pub trait HandlerFnArgBuilder<'c> {
 
 macro_rules! impl_handler_fn {
     ($($Args:ident),*) => {
-        impl<E, $($Args,)* F> HandlerFn<E, ($($Args,)*)> for F where
+        impl<$($Args,)* F> HandlerFn<($($Args,)*)> for F where
+            $($Args: HandlerFnArg,)*
+            F: 'static,
+            for<'f> &'f F: Fn($($Args,)*) -> anyhow::Result<()>,
+            for<'f> &'f F: Fn($(<$Args::Builder as HandlerFnArgBuilder>::Arg,)*) -> anyhow::Result<()>,
+        {
+            #[track_caller]
+            fn into_handler(self) -> Handler {
+                fn make_fn<$($Args,)*>(
+                    f: impl Fn($($Args,)*) -> anyhow::Result<()>
+                ) -> impl Fn($($Args,)*) -> anyhow::Result<()> {
+                    f
+                }
+
+                Handler {
+                    dependencies: {
+                        #[allow(unused_mut)]
+                        let mut result = Vec::new();
+                        $($Args::dependencies(&mut result);)*
+                        result
+                    },
+                    fn_box: Box::new(move |#[allow(unused)] context| {
+                        make_fn(&self)($($Args::Builder::build(context)?,)*)
+                    }),
+                    name: None,
+                    location: Location::caller().clone(),
+                }
+            }
+        }
+
+        impl<E, $($Args,)* F> EventHandlerFn<E, ($($Args,)*)> for F where
             E: Event,
             $($Args: HandlerFnArg,)*
             F: 'static,
