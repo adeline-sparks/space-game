@@ -13,7 +13,7 @@ mod state;
 mod topic;
 
 pub use event::{AnyEvent, Event, EventWriter};
-pub use handler::{Handler, HandlerFn};
+pub use handler::{Handler, EventHandlerFn};
 pub use reactor::{InitEvent, Reactor};
 pub use state::{AnyState, DelayedReader, Reader, State, StateContainer, Writer};
 pub use topic::{AnyTopic, Publisher, Subscriber, Topic};
