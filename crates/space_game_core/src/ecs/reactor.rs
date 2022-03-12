@@ -27,7 +27,12 @@ impl Event for InitEvent {}
 /// `Handler`s are able to emit their own `Events`, which are dispatched
 /// similarly after the initial `Event`. If the `Handler` returns an error while
 /// handling any `Event`, it is logged but dispatch of that `Event` continues.
-pub struct Reactor(HashMap<EventId, Vec<Handler>>);
+pub struct Reactor {
+    /// Handlers called by the Reactor.
+    handlers: Vec<Handler>,
+    /// Handler indices to execute for each EventId.
+    event_dispatch_order: HashMap<EventId, Vec<usize>>,
+}
 
 impl Reactor {
     /// Begin constructing a `Reactor` via [`ReactorBuilder`].
@@ -41,9 +46,8 @@ impl Reactor {
     /// can initialize their state.
     pub fn new_state_container(&self) -> StateContainer {
         let states = StateContainer::new(
-            self.0
-                .values()
-                .flatten()
+            self.handlers
+                .iter()
                 .flat_map(|h| h.dependencies().iter())
                 .filter_map(|d| d.state_id().cloned())
                 .collect::<HashSet<_>>(),
@@ -60,7 +64,7 @@ impl Reactor {
         let queue = EventQueue::new();
         queue.push(AnyEvent::new(event));
         while let Some(event) = queue.pop() {
-            let handlers = match self.0.get(&E::id()) {
+            let dispatch_order = match self.event_dispatch_order.get(&E::id()) {
                 Some(handlers) => handlers,
                 None => continue,
             };
@@ -73,11 +77,12 @@ impl Reactor {
                 event: &event,
             };
 
-            for h in handlers {
-                match h.call(&context) {
+            for &idx in dispatch_order {
+                let handler = &self.handlers[idx];
+                match handler.call(&context) {
                     Ok(()) => {}
                     Err(err) => {
-                        error!("Handler '{}' failed while handling {:?}: {}", h, event, err);
+                        error!("Handler '{handler}' failed while handling {event:?}: {err}");
                     }
                 }
             }
@@ -93,7 +98,7 @@ pub struct ReactorBuilder(HashMap<EventId, Vec<Handler>>);
 #[derive(Error, Debug)]
 pub enum BuildReactorError {
     /// Indicates that the handlers for the given [`EventId`] have a circular dependency.
-    #[error("While processing {0}: {1}")]
+    #[error("While analyzing handlers for {0}: {1}")]
     Cycle(EventId, #[source] CyclicDependenciesError),
 }
 
@@ -105,13 +110,20 @@ impl ReactorBuilder {
     }
 
     /// Build the [`Reactor`].
-    pub fn build(mut self) -> Result<Reactor, BuildReactorError> {
-        for (event_id, handlers) in self.0.iter_mut() {
-            sort_handlers_by_execution_order(handlers)
+    pub fn build(self) -> Result<Reactor, BuildReactorError> {
+        let mut handlers = Vec::new();
+        let mut event_dispatch_order = HashMap::new();
+        for (event_id, mut event_handlers) in self.0 {
+            sort_handlers_by_execution_order(&mut event_handlers)
                 .map_err(|err| BuildReactorError::Cycle(event_id.clone(), err))?;
+            
+            let start = handlers.len();
+            handlers.extend(event_handlers);
+            let end = handlers.len();
+            event_dispatch_order.insert(event_id, (start..end).collect());
         }
 
-        Ok(Reactor(self.0))
+        Ok(Reactor { handlers, event_dispatch_order })
     }
 }
 
