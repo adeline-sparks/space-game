@@ -113,14 +113,18 @@ impl ReactorBuilder {
     pub fn build(self) -> Result<Reactor, BuildReactorError> {
         let mut handlers = Vec::new();
         let mut event_dispatch_order = HashMap::new();
-        for (event_id, mut event_handlers) in self.0 {
-            sort_handlers_by_execution_order(&mut event_handlers)
+        for (event_id, event_handlers) in self.0 {
+            let all_event_handlers = event_handlers.iter().collect::<Vec<_>>();
+            let mut order = 
+                compute_execution_order(&all_event_handlers)
                 .map_err(|err| BuildReactorError::Cycle(event_id.clone(), err))?;
             
-            let start = handlers.len();
+            let offset = all_event_handlers.len();
+            for idx in &mut order {
+                *idx += offset;
+            }
             handlers.extend(event_handlers);
-            let end = handlers.len();
-            event_dispatch_order.insert(event_id, (start..end).collect());
+            event_dispatch_order.insert(event_id, order);
         }
 
         Ok(Reactor { handlers, event_dispatch_order })
@@ -145,10 +149,10 @@ impl Display for CyclicDependenciesError {
     }
 }
 
-/// Re-arranges `handlers` in-place to build a topographical order suitable for dispatch.
-fn sort_handlers_by_execution_order(
-    handlers: &mut Vec<Handler>,
-) -> Result<(), CyclicDependenciesError> {
+/// TODO
+fn compute_execution_order(
+    handlers: &[&Handler],
+) -> Result<Vec<usize>, CyclicDependenciesError> {
     /// Node type for the dependency graph.
     enum Node {
         /// Node represents the handler at the given index in `handlers`.
@@ -218,14 +222,10 @@ fn sort_handlers_by_execution_order(
     // Find strongly connected components for the graph in reverse topological order.
     let sccs_rev_topo = kosaraju_scc(&graph);
 
-    // Drain the handlers vec into a temporary we can take from.
-    let mut handlers_temp = handlers.drain(..).map(Some).collect::<Vec<_>>();
-
-    // Scan each component.
+    let mut result = Vec::new();
     for scc in sccs_rev_topo {
-        // If there are multiple nodes in the strongly connected component, they form a cycle.
+        // Report a cyclic error if multiple nodes appear in the cycle.
         if scc.len() > 1 {
-            // Return an error describing the cycle.
             let names = scc
                 .iter()
                 .map(|&node| match &graph[node] {
@@ -240,9 +240,9 @@ fn sort_handlers_by_execution_order(
 
         // Append handlers to our output by taking them from the temporary storage.
         if let &Node::Handler(idx) = &graph[scc[0]] {
-            handlers.push(handlers_temp[idx].take().expect("Node appears in two SCCs"));
+            result.push(idx);
         }
     }
 
-    Ok(())
+    Ok(result)
 }
