@@ -1,5 +1,8 @@
 //! TODO
 
+#[allow(clippy::missing_docs_in_private_items)]
+mod entity;
+
 mod event;
 
 #[allow(clippy::missing_docs_in_private_items)]
@@ -14,7 +17,7 @@ mod topic;
 
 pub use event::{AnyEvent, Event, EventWriter};
 pub use handler::{Handler, EventHandlerFn};
-pub use reactor::{InitEvent, Reactor};
+pub use reactor::{InitEvent, Reactor, HandlerGroup};
 pub use state::{AnyState, DelayedReader, Reader, State, StateContainer, Writer};
 pub use topic::{AnyTopic, Publisher, Subscriber, Topic};
 

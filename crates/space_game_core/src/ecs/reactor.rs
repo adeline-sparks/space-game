@@ -107,6 +107,12 @@ pub enum BuildReactorError {
     Cycle(EventId, #[source] CyclicDependenciesError),
 }
 
+/// TODO
+pub trait HandlerGroup {
+    /// TODO
+    fn add_group(builder: ReactorBuilder) -> ReactorBuilder;
+}
+
 impl ReactorBuilder {
     /// TODO
     pub fn add<E: Event, Args>(mut self, f: impl EventHandlerFn<E, Args>) -> Self {
@@ -118,6 +124,11 @@ impl ReactorBuilder {
     pub fn add_global<Args>(mut self, f: impl HandlerFn<Args>) -> Self {
         self.global_handlers.push(f.into_handler());
         self
+    }
+
+    /// TODO
+    pub fn add_group<G: HandlerGroup>(self) -> ReactorBuilder {
+        G::add_group(self)
     }
 
     /// Build the [`Reactor`].

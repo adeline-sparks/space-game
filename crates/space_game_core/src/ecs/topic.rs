@@ -147,7 +147,7 @@ impl<'c, T: Topic> HandlerFnArgBuilder<'c> for PublisherBuilder<T> {
 pub struct Subscriber<'t, T: Topic>(&'t TopicContainer, PhantomData<&'t T>);
 
 impl<'t, T: Topic> Subscriber<'t, T> {
-    pub fn iter(&self) -> impl Iterator + '_ {
+    pub fn iter(&self) -> impl Iterator<Item=Ref<T>> + '_ {
         (0..).into_iter().map_while(move |idx| self.0.get::<T>(idx))
     }
 }
