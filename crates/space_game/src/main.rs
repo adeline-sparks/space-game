@@ -158,19 +158,19 @@ async fn main_render() -> anyhow::Result<()> {
     let vao = Vao::build(&context, &shader, &vbo)?;
 
     let model_view_projection_loc =
-        shader.uniform_location::<Matrix4<f32>>("model_view_projection")?;
-    let model_matrix_loc = shader.uniform_location::<Matrix4<f32>>("model_matrix")?;
-    let normal_matrix_loc = shader.uniform_location::<Matrix4<f32>>("normal_matrix")?;
-    let tex_color = shader.uniform_location::<Sampler2D>("tex_color")?;
-    let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
-    let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
-    let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
-    let light_dir_loc = shader.uniform_location::<Vector3<f32>>("light_dir").ok();
+        shader.uniform::<Matrix4<f32>>("model_view_projection")?;
+    let model_matrix_loc = shader.uniform::<Matrix4<f32>>("model_matrix")?;
+    let normal_matrix_loc = shader.uniform::<Matrix4<f32>>("normal_matrix")?;
+    let tex_color = shader.uniform::<Sampler2D>("tex_color")?;
+    let tex_normal = shader.uniform::<Sampler2D>("tex_normal")?;
+    let tex_scale_loc = shader.uniform::<f32>("tex_scale")?;
+    let tex_blend_sharpness_loc = shader.uniform::<f32>("tex_blend_sharpness")?;
+    let light_dir_loc = shader.uniform::<Vector3<f32>>("light_dir").ok();
 
-    shader.set_uniform(&tex_scale_loc, 0.1);
-    shader.set_uniform(&tex_blend_sharpness_loc, 4.0);
-    shader.set_uniform(&tex_color, Sampler2D(0));
-    shader.set_uniform(&tex_normal, Sampler2D(1));
+    tex_scale_loc.set(&0.1);
+    tex_blend_sharpness_loc.set(&4.0);
+    tex_color.set(&Sampler2D(0));
+    tex_normal.set(&Sampler2D(1));
 
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f64) / (canvas.height() as f64);
@@ -227,14 +227,14 @@ async fn main_render() -> anyhow::Result<()> {
         let model = Matrix4::identity();
         let model_view = view.to_matrix() * model;
         let model_view_projection = projection * model_view;
-        shader.set_uniform(&model_view_projection_loc, model_view_projection.cast());
-        shader.set_uniform(&model_matrix_loc, model.cast());
-        shader.set_uniform(&normal_matrix_loc, model.cast());
+        model_view_projection_loc.set(&model_view_projection.cast());
+        model_matrix_loc.set(&model.cast());
+        normal_matrix_loc.set(&model.cast());
         if let Some(loc) = &light_dir_loc {
-            shader.set_uniform(loc, light_dir.cast());
+            loc.set(&light_dir.cast());
         }
         context.draw(
-            &[Some(&color_texture), Some(&normal_texture)],
+            &[&color_texture, &normal_texture],
             &vao,
         );
     }

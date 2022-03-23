@@ -4,7 +4,6 @@ use nalgebra::{Matrix3, Matrix4, Vector2, Vector3, Vector4};
 use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use crate::dom::DomError;
 use super::Context;
 
 pub struct Shader {
@@ -24,8 +23,6 @@ pub enum ShaderError {
     LinkError(String),
     #[error("Shader does not have uniform `{0}`")]
     MissingUniform(String),
-    #[error(transparent)]
-    DomError(#[from] DomError),
 }
 
 impl Shader {
@@ -62,42 +59,37 @@ impl Shader {
         Ok(Shader { gl, program })
     }
 
-    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, ShaderError> {
+    pub fn uniform<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, ShaderError> {
         let location = self.gl.get_uniform_location(&self.program, name)
             .ok_or_else(|| ShaderError::MissingUniform(name.into()))?;
 
-        // TODO type check here
-
         Ok(Uniform {
+            gl: self.gl.clone(),
+            program: self.program.clone(),
             location,
             phantom: PhantomData,
         })  
     }
-
-    pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {
-        self.gl.use_program(Some(&self.program));
-        value.set_uniform(&self.gl, &uniform.location);
-    }
 }
 
 fn compile_shader(
-    context: &WebGl2RenderingContext,
+    gl: &WebGl2RenderingContext,
     shader_type: u32,
     source: &str,
 ) -> Result<WebGlShader, ShaderError> {
-    let shader = context
+    let shader = gl
         .create_shader(shader_type)
         .ok_or(ShaderError::CreateShaderFailed)?;
-    context.shader_source(&shader, source);
-    context.compile_shader(&shader);
+    gl.shader_source(&shader, source);
+    gl.compile_shader(&shader);
 
-    if context
+    if gl
         .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
         .as_bool()
         != Some(true)
     {
         return Err(ShaderError::CompileError(
-            context
+            gl
                 .get_shader_info_log(&shader)
                 .unwrap_or_else(|| "Failed to `get_shader_info_log`".into()),
         ));
@@ -112,9 +104,18 @@ impl Drop for Shader {
     }
 }
 
-pub struct Uniform<T: UniformValue> {
+pub struct Uniform<T> {
+    gl: WebGl2RenderingContext,
+    program: WebGlProgram,
     location: WebGlUniformLocation,
     phantom: PhantomData<T>,
+}
+
+impl<T: UniformValue> Uniform<T> {
+    pub fn set(&self, value: &T) {
+        self.gl.use_program(Some(&self.program));
+        value.set_uniform(&self.gl, &self.location);
+    }
 }
 
 pub trait UniformValue {

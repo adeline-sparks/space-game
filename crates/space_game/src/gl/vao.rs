@@ -22,8 +22,6 @@ pub enum VaoError {
     CreateVertexArrayFailed,
     #[error("Failed to create_buffer")]
     CreateBufferFailed,
-    #[error("Type error for attribute `{0}` (Found {1:#04X} expected {2:#04X})")]
-    AttributeTypeError(AttributeName, u32, u32),
     #[error("Shader expects unknown attribute `{0}`")]
     UnknownAttribute(AttributeName),
 }
@@ -35,28 +33,25 @@ impl Vao {
         vbo: &Vbo,
     ) -> Result<Self, VaoError> {
         let gl = &context.gl;
-        let program = &shader.program;
-        let vert_buffer = &vbo.vert_buffer;
-        let index_buffer = &vbo.index_buffer;
         let vao = gl
             .create_vertex_array()
             .ok_or(VaoError::CreateVertexArrayFailed)?;
         gl.bind_vertex_array(Some(&vao));
-        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(vert_buffer));
-        if let Some(index_buffer) = index_buffer {
+        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&vbo.vert_buffer));
+        if let Some(index_buffer) = &vbo.index_buffer {
             gl.bind_buffer(WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
         }
 
-        let num_attribs = gl.get_program_parameter(program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
+        let num_attribs = gl.get_program_parameter(&shader.program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
             .unchecked_into_f64()
             as u32;
         for i in 0..num_attribs {
-            let attrib = gl.get_active_attrib(program, i).unwrap();
+            let attrib = gl.get_active_attrib(&shader.program, i).unwrap();
             let name = AttributeName::from(attrib.name());
 
             // TODO type check
 
-            let loc = gl.get_attrib_location(program, name.as_ref()).try_into().unwrap();
+            let loc = gl.get_attrib_location(&shader.program, name.as_ref()).try_into().unwrap();
             let &(attr_type, offset) = vbo.layout.types_offsets
                 .get(&name)
                 .ok_or(VaoError::UnknownAttribute(name))?;
@@ -75,7 +70,7 @@ impl Vao {
         Ok(Vao {
             gl: gl.clone(),
             vao,
-            program: program.clone(),
+            program: shader.program.clone(),
             primitive_type: vbo.primitive_type,
             index_count: vbo.index_count,
             indexed: vbo.index_buffer.is_some(),
