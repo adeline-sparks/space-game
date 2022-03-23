@@ -1,12 +1,13 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 
+use bytemuck::bytes_of;
 use nalgebra::{Vector2, Vector3};
 use thiserror::Error;
+use indexmap::IndexMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mesh {
-    pub attributes: HashMap<AttributeName, AttributeVec>,
+    pub attributes: IndexMap<AttributeName, AttributeVec>,
     pub indices: Option<Vec<u16>>,
     pub primitive_type: PrimitiveType,
 }
@@ -19,12 +20,6 @@ pub const NORMAL: AttributeName = Cow::Borrowed("vert_normal");
 pub enum AttributeVec {
     Vec2(Vec<Vector2<f32>>),
     Vec3(Vec<Vector3<f32>>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Attribute {
-    pub name: AttributeName,
-    pub type_: AttributeType,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -43,8 +38,8 @@ pub enum PrimitiveType {
 pub enum MeshError {
     #[error("Mesh ends with incomplete primitive ({0} indices is not a multiple of {1})")]
     IncompletePrimitive(usize, usize),
-    #[error("Too many indices for GPU upload")]
-    TooManyIndices(usize),
+    #[error("Too many vertices ({0})")]
+    TooManyVertices(usize),
     #[error("Index {0} out of bounds: {1} > {2}")]
     IndexOutOfBounds(usize, u16, u16),
     #[error("Two or more attributes have different lengths: `{first_name}` ({first_len}) and `{second_name}` ({second_len})")]
@@ -59,10 +54,35 @@ pub enum MeshError {
 impl Mesh {
     pub fn new(primitive_type: PrimitiveType) -> Self {
         Mesh {
-            attributes: HashMap::new(),
+            attributes: Default::default(),
             indices: None,
             primitive_type,
         }
+    }
+
+    pub fn validate(&self) -> Result<(), MeshError> {
+        let vert_count = self.vert_count()?;
+        let index_count = self.index_count()?;
+        let prim_verts = self.primitive_type.num_verts();
+        if (index_count % prim_verts) != 0 {
+            return Err(MeshError::IncompletePrimitive(index_count, prim_verts));
+        }
+
+        if let Some(indices) = &self.indices {
+            let max: u16 = (vert_count - 1)
+                .try_into()
+                .map_err(|_| MeshError::TooManyVertices(vert_count))?;
+            if let Some((i, val)) = indices
+                .iter()
+                .cloned()
+                .enumerate()
+                .find(|&(_, val)| val > max)
+            {
+                return Err(MeshError::IndexOutOfBounds(i, val, max));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn vert_count(&self) -> Result<usize, MeshError> {
@@ -128,32 +148,6 @@ impl Mesh {
     }
 }
 
-impl Mesh {
-    pub fn validate(&self) -> Result<(), MeshError> {
-        let index_count = self.index_count().expect("Attribute lengths are validated");
-        let prim_verts = self.primitive_type.num_verts();
-        if (index_count % prim_verts) != 0 {
-            return Err(MeshError::IncompletePrimitive(index_count, prim_verts));
-        }
-
-        if let Some(indices) = &self.indices {
-            let max: u16 = (index_count - 1)
-                .try_into()
-                .map_err(|_| MeshError::TooManyIndices(index_count))?;
-            if let Some((i, val)) = indices
-                .iter()
-                .cloned()
-                .enumerate()
-                .find(|&(_, val)| val > max)
-            {
-                return Err(MeshError::IndexOutOfBounds(i, val, max));
-            }
-        }
-
-        Ok(())
-    }
-}
-
 impl AttributeType {
     pub fn byte_count(&self) -> usize {
         match self {
@@ -184,6 +178,13 @@ impl AttributeVec {
             AttributeVec::Vec3(_) => AttributeType::Vec3,
         }
     }
+
+    pub fn get_bytes(&self, i: usize) -> &[u8] {
+        match self {
+            AttributeVec::Vec2(vals) => bytes_of(&vals[i]),
+            AttributeVec::Vec3(vals) => bytes_of(&vals[i]),
+        }
+    }
 }
 
 impl PrimitiveType {
@@ -193,4 +194,10 @@ impl PrimitiveType {
             PrimitiveType::TRIANGLES => 3,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct AttributeLayout {
+    pub types_offsets: IndexMap<AttributeName, (AttributeType, usize)>,
+    pub stride: usize,
 }

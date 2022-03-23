@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use nalgebra::{Matrix3, Matrix4, Vector2, Vector3, Vector4};
@@ -6,12 +5,11 @@ use thiserror::Error;
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 use crate::dom::DomError;
-use crate::gl::{webgl_type, Context};
-use crate::mesh::{Attribute, AttributeName};
+use super::Context;
 
 pub struct Shader {
-    gl: WebGl2RenderingContext,
-    program: WebGlProgram,
+    pub(super) gl: WebGl2RenderingContext,
+    pub(super) program: WebGlProgram,
 }
 
 #[derive(Error, Debug)]
@@ -24,10 +22,6 @@ pub enum ShaderError {
     CompileError(String),
     #[error("Error while linking shader: {0}")]
     LinkError(String),
-    #[error("Type error for attribute `{0}` (Found {1:#04X} expected {2:#04X})")]
-    AttributeTypeError(AttributeName, u32, u32),
-    #[error("Shader expects unknown attribute `{0}`")]
-    UnknownAttribute(AttributeName),
     #[error("Shader does not have uniform `{0}`")]
     MissingUniform(String),
     #[error(transparent)]
@@ -37,7 +31,6 @@ pub enum ShaderError {
 impl Shader {
     pub fn compile(
         context: &Context,
-        attributes: &[Attribute],
         vert_source: &str,
         frag_source: &str,
     ) -> Result<Shader, ShaderError> {
@@ -51,10 +44,9 @@ impl Shader {
             .ok_or(ShaderError::CreateProgramFailed)?;
         gl.attach_shader(&program, &vert_shader);
         gl.attach_shader(&program, &frag_shader);
-        for (i, attr) in attributes.iter().enumerate() {
-            gl.bind_attrib_location(&program, i as u32, &attr.name);
-        }
         gl.link_program(&program);
+        gl.delete_shader(Some(&vert_shader));
+        gl.delete_shader(Some(&frag_shader));
 
         if gl
             .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
@@ -67,56 +59,24 @@ impl Shader {
             ));
         }
 
-        let num_active_attributes = gl
-            .get_program_parameter(&program, WebGl2RenderingContext::ACTIVE_ATTRIBUTES)
-            .unchecked_into_f64() as usize;
-
-        let attribute_map = attributes
-            .iter()
-            .map(|attr| (attr.name.as_ref(), attr))
-            .collect::<HashMap<_, _>>();
-        for i in 0..num_active_attributes {
-            let info = gl
-                .get_active_attrib(&program, i as u32)
-                .expect("get_active_attrib failed");
-
-            let attribute = *attribute_map
-                .get(info.name().as_str())
-                .ok_or_else(|| ShaderError::UnknownAttribute(info.name().into()))?;
-
-            let type_ = webgl_type(attribute.type_);
-            if info.type_() != type_ {
-                return Err(ShaderError::AttributeTypeError(
-                    attribute.name.clone(),
-                    info.type_(),
-                    type_,
-                ));
-            }
-        }
-
         Ok(Shader { gl, program })
     }
 
-    pub fn try_uniform_location<T: UniformValue>(&self, name: &str) -> Option<Uniform<T>> {
-        let location = self.gl.get_uniform_location(&self.program, name)?;
-        Some(Uniform {
+    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, ShaderError> {
+        let location = self.gl.get_uniform_location(&self.program, name)
+            .ok_or_else(|| ShaderError::MissingUniform(name.into()))?;
+
+        // TODO type check here
+
+        Ok(Uniform {
             location,
             phantom: PhantomData,
-        })
-    }
-
-    pub fn uniform_location<T: UniformValue>(&self, name: &str) -> Result<Uniform<T>, ShaderError> {
-        self.try_uniform_location(name)
-            .ok_or_else(|| ShaderError::MissingUniform(name.into()))
+        })  
     }
 
     pub fn set_uniform<T: UniformValue>(&self, uniform: &Uniform<T>, value: T) {
         self.gl.use_program(Some(&self.program));
         value.set_uniform(&self.gl, &uniform.location);
-    }
-
-    pub fn use_(&self) {
-        self.gl.use_program(Some(&self.program));
     }
 }
 

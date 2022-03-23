@@ -5,8 +5,8 @@ use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
 #[derive(Clone)]
 pub struct Texture {
-    gl: WebGl2RenderingContext,
-    texture: WebGlTexture,
+    pub(super) gl: WebGl2RenderingContext,
+    pub(super) texture: WebGlTexture,
 }
 
 #[derive(Error, Debug)]
@@ -39,15 +39,6 @@ impl Texture {
             gl: gl.clone(),
             texture,
         })
-    }
-
-    pub fn bind(textures: &[Option<&Self>], gl: &WebGl2RenderingContext) {
-        for (i, texture) in textures.iter().enumerate() {
-            if let Some(texture) = texture {
-                gl.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-                gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.texture));
-            }
-        }
     }
 }
 

@@ -3,9 +3,8 @@ use std::f64::consts::PI;
 
 use dom::{open_websocket, spawn, InputEventListener, Key};
 use futures::FutureExt;
-use gl::{Context, Sampler2D, Shader, Texture, Vao};
+use gl::{Context, Sampler2D, Shader, Texture, Vao, Vbo};
 use log::info;
-use mesh::{Attribute, NORMAL, POSITION};
 use nalgebra::{Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector3};
 
 pub mod dom;
@@ -15,7 +14,6 @@ pub mod voxel;
 use voxel::{marching_cubes, SignedDistanceFunction};
 
 use crate::dom::DomError;
-use crate::mesh::AttributeType;
 
 pub fn main() {
     console_error_panic_hook::set_once();
@@ -68,17 +66,6 @@ async fn main_render() -> anyhow::Result<()> {
     let color_texture = Texture::load(&context, "res/ground_0010_base_color_2k.jpg").await?;
     let normal_texture = Texture::load(&context, "res/ground_0010_normal_2k.jpg").await?;
 
-    let attributes = &[
-        Attribute {
-            name: POSITION,
-            type_: AttributeType::Vec3,
-        },
-        Attribute {
-            name: NORMAL,
-            type_: AttributeType::Vec3,
-        },
-    ];
-
     let mesh = marching_cubes(
         &(
             Sphere(Vector3::new(0.0, 0.0, 0.0), 50.0),
@@ -90,12 +77,10 @@ async fn main_render() -> anyhow::Result<()> {
         ),
         Vector3::new(32, 32, 32),
     );
-
-    let vao = Vao::build(&context, attributes, &mesh)?;
+    let vbo = Vbo::build(&context, &mesh)?;
 
     let shader = Shader::compile(
         &context,
-        attributes,
         r##"#version 300 es
         uniform mat4x4 model_view_projection;
         uniform mat4x4 model_matrix;
@@ -170,6 +155,8 @@ async fn main_render() -> anyhow::Result<()> {
         "##,
     )?;
 
+    let vao = Vao::build(&context, &shader, &vbo)?;
+
     let model_view_projection_loc =
         shader.uniform_location::<Matrix4<f32>>("model_view_projection")?;
     let model_matrix_loc = shader.uniform_location::<Matrix4<f32>>("model_matrix")?;
@@ -178,7 +165,7 @@ async fn main_render() -> anyhow::Result<()> {
     let tex_normal = shader.uniform_location::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform_location::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform_location::<f32>("tex_blend_sharpness")?;
-    let light_dir_loc = shader.try_uniform_location::<Vector3<f32>>("light_dir");
+    let light_dir_loc = shader.uniform_location::<Vector3<f32>>("light_dir").ok();
 
     shader.set_uniform(&tex_scale_loc, 0.1);
     shader.set_uniform(&tex_blend_sharpness_loc, 4.0);
@@ -247,7 +234,6 @@ async fn main_render() -> anyhow::Result<()> {
             shader.set_uniform(loc, light_dir.cast());
         }
         context.draw(
-            &shader,
             &[Some(&color_texture), Some(&normal_texture)],
             &vao,
         );

@@ -4,15 +4,17 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::dom::{self, DomError};
-use crate::mesh::AttributeType;
+use crate::mesh::{AttributeType, PrimitiveType};
 
 mod shader;
 mod texture;
 mod vao;
+mod vbo;
 
 pub use shader::{Sampler2D, Shader, Uniform};
 pub use texture::Texture;
 pub use vao::Vao;
+pub use vbo::Vbo;
 
 pub struct Context {
     gl: WebGl2RenderingContext,
@@ -51,7 +53,7 @@ impl Context {
         );
     }
 
-    pub fn draw(&self, shader: &Shader, textures: &[Option<&Texture>], vao: &Vao) {
+    pub fn draw(&self, textures: &[Option<&Texture>], vao: &Vao) {
         self.gl.viewport(
             0,
             0,
@@ -60,9 +62,35 @@ impl Context {
         );
         self.gl.enable(WebGl2RenderingContext::CULL_FACE);
         self.gl.front_face(WebGl2RenderingContext::CW);
-        shader.use_();
-        Texture::bind(textures, &self.gl);
-        vao.draw();
+        for (i, texture) in textures.iter().enumerate() {
+            if let Some(texture) = texture {
+                self.gl.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
+                self.gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.texture));
+            }
+        }
+
+        self.gl.use_program(Some(&vao.program));
+        self.gl.bind_vertex_array(Some(&vao.vao));
+        let mode = match vao.primitive_type {
+            PrimitiveType::LINES => WebGl2RenderingContext::LINES,
+            PrimitiveType::TRIANGLES => WebGl2RenderingContext::TRIANGLES,
+        };
+        let count = vao.index_count as i32;
+
+        if vao.indexed {
+            self.gl.draw_elements_with_i32(
+                mode,
+                count,
+                WebGl2RenderingContext::UNSIGNED_SHORT,
+                0,
+            );
+        } else {
+            self.gl.draw_arrays(
+                mode,
+                0,
+                count,
+            );
+        }
     }
 }
 
