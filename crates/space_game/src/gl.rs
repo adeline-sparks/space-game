@@ -11,7 +11,7 @@ mod texture;
 mod vao;
 mod vbo;
 
-pub use shader::{Sampler2D, Shader, Uniform};
+pub use shader::{Sampler2D, Shader, ShaderLoader, Uniform};
 pub use texture::Texture;
 pub use vao::Vao;
 pub use vbo::Vbo;

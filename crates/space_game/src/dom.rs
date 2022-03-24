@@ -70,6 +70,17 @@ pub async fn load_image(src: &str) -> Result<HtmlImageElement, DomError> {
     }
 }
 
+pub async fn load_text(src: &str) -> Result<String, DomError> {
+    let request = web_sys::XmlHttpRequest::new()?;
+    request.open("GET", src)?;
+    request.send()?;
+
+    select! {
+        _ = await_event(&request, "load")? => Ok(request.response_text()?.unwrap()),
+        _ = await_event(&request, "error")? => Err(DomError::ImageError),
+    }    
+}
+
 pub async fn open_websocket(url: &str) -> Result<WebSocket, DomError> {
     let mut url = Url::parse(url)?;
     let scheme = match url.scheme() {
