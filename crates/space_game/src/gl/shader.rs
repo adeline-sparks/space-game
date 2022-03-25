@@ -230,6 +230,8 @@ impl ShaderLoader {
             return Err(ShaderLoaderError::IncludeCycle(path.to_string()));
         }
 
+        let path_base = &path[..path.rfind('/').unwrap_or(0)];
+
         let (source_index, _) = self.cache.insert_full(path.to_string(), None);
 
         let file = load_text(path)
@@ -242,18 +244,19 @@ impl ShaderLoader {
             let line_trimmed = line.trim_start();
             if let Some(rest) = line_trimmed.strip_prefix("#include") {
                 let include_literal = rest.trim();
-                let include = 
-                    (if let Some(rest) = include_literal.strip_prefix('<') {
-                        rest.strip_suffix('>')
-                    } else if let Some(rest) = include_literal.strip_prefix('"') {
-                        rest.strip_suffix('"')
-                    } else {
-                        None
-                    })
-                    .ok_or_else(|| ShaderLoaderError::IncludeSyntaxError(path.to_string()))?;
 
-                self.load(include).await?;
-                result.push_str(self.cache[include].as_ref().unwrap());
+                let include_path = 
+                    if let Some(rest) = include_literal.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
+                        rest.to_string()
+                    } else if let Some(rest) = include_literal.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+                        let rest = rest.strip_prefix('/').unwrap_or(rest);
+                        format!("{path_base}/{rest}")
+                    } else {
+                        return Err(ShaderLoaderError::IncludeSyntaxError(path.to_string()));
+                    };
+
+                self.load(&include_path).await?;
+                result.push_str(self.cache[&include_path].as_ref().unwrap());
                 needs_line_directive = true;
                 continue;
             }

@@ -1,4 +1,7 @@
 #version 300 es
+
+#include "test_include.glsl"
+
 uniform mat4x4 model_view_projection;
 uniform mat4x4 model_matrix;
 uniform mat4x4 normal_matrix;

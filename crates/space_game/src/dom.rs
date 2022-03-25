@@ -3,7 +3,6 @@ use futures::{select, Future, FutureExt};
 use js_sys::{Function, Promise};
 
 use thiserror::Error;
-use url::{Url, ParseError};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{
@@ -34,8 +33,6 @@ pub enum DomError {
     ImageError,
     #[error("WebSocket connection failed")]
     WebSocketError,
-    #[error(transparent)]
-    UrlError(#[from] ParseError)
 }
 
 impl From<JsValue> for DomError {
@@ -81,16 +78,20 @@ pub async fn load_text(src: &str) -> Result<String, DomError> {
     }    
 }
 
-pub async fn open_websocket(url: &str) -> Result<WebSocket, DomError> {
-    let mut url = Url::parse(url)?;
-    let scheme = match url.scheme() {
-        "http" => "ws",
-        "https" => "wss",
-        _ => return Err(DomError::UnknownProtocol),
-    };
-    url.set_scheme(scheme).map_err(|()| DomError::UnknownProtocol)?;
+pub async fn open_websocket(rel_uri: &str) -> Result<WebSocket, DomError> {
+    assert!(!rel_uri.starts_with('/'));
+    assert!(!rel_uri.contains(':'));
 
-    let ws = WebSocket::new(url.as_str())?;
+    let mut uri = get_base_uri()?;
+    if uri.starts_with("http:") {
+        uri.replace_range(0..4, "ws");
+    } else if uri.starts_with("https:") {
+        uri.replace_range(0..5, "wss");
+    }
+    let base_pos = uri.rfind('/').map(|p| p + 1).unwrap_or(0);
+    uri.replace_range(base_pos.., rel_uri);
+
+    let ws = WebSocket::new(&uri)?;
     ws.set_binary_type(BinaryType::Arraybuffer);
 
     select! {
@@ -136,12 +137,10 @@ pub fn get_canvas(element_id: &str) -> Result<HtmlCanvasElement, DomError> {
         .unchecked_into::<web_sys::HtmlCanvasElement>())
 }
 
-pub fn get_base_uri() -> Result<Url, DomError> {
-    let s = document()?
+pub fn get_base_uri() -> Result<String, DomError> {
+    document()?
         .base_uri()?
-        .ok_or(DomError::BaseUriMissing)?;
-
-    Ok(Url::parse(&s)?)
+        .ok_or(DomError::BaseUriMissing)
 }
 
 fn window() -> Result<Window, DomError> {

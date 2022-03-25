@@ -111,11 +111,9 @@ impl InputEventListener {
             Closure::wrap(Box::new(move |ev: JsValue| {
                 let ev = ev.unchecked_ref::<Event>();
                 if document.pointer_lock_element().as_ref() == Some(&target) {
-                    if ev.type_() != "wheel" {
-                        ev.prevent_default();
-                    }
+                    ev.prevent_default();
                     state.borrow_mut().apply_event(ev);
-                } else if ev.type_() == "mousedown" {
+                } else if ev.type_() == "mousedown" && ev.unchecked_ref::<MouseEvent>().button() == 0 {
                     target.request_pointer_lock();
                 }
 
