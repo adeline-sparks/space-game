@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 
 use dom::{open_websocket, spawn, InputEventListener, Key};
 use futures::FutureExt;
-use gl::{Context, Sampler2D, Shader, Texture, Vao, Vbo, ShaderLoader};
+use gl::{Context, Sampler2D, Shader, Texture, DrawPrimitives, PrimitiveBuffer, ShaderLoader};
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector3};
 
@@ -77,7 +77,7 @@ async fn main_render() -> anyhow::Result<()> {
         ),
         Vector3::new(32, 32, 32),
     );
-    let vbo = Vbo::build(&context, &mesh)?;
+    let vbo = PrimitiveBuffer::build(&context, &mesh)?;
 
     let mut shader_loader = ShaderLoader::new();
     let shader = Shader::load(
@@ -87,7 +87,7 @@ async fn main_render() -> anyhow::Result<()> {
         "res/test.frag.glsl",
     ).await?;
 
-    let vao = Vao::build(&context, &shader, &vbo)?;
+    let vao = DrawPrimitives::build(&context, &shader, &vbo)?;
 
     let model_view_projection_loc =
         shader.uniform::<Matrix4<f32>>("model_view_projection")?;

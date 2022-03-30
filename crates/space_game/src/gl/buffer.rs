@@ -6,9 +6,9 @@ use web_sys::{WebGlBuffer, WebGl2RenderingContext};
 
 use crate::mesh::{AttributeName, Mesh, MeshError, AttributeVec, AttributeLayout, PrimitiveType};
 
-use super::Context;
+use super::{Context};
 
-pub struct Vbo {
+pub struct PrimitiveBuffer {
     pub(super) gl: WebGl2RenderingContext,
     pub(super) vert_buffer: WebGlBuffer,
     pub(super) index_buffer: Option<WebGlBuffer>,
@@ -18,15 +18,15 @@ pub struct Vbo {
 }
 
 #[derive(Error, Debug)]
-pub enum VboError {
+pub enum BufferError {
     #[error("Failed to create_buffer")]
     CreateFailed,
     #[error(transparent)]
     MeshError(#[from] MeshError),
 }
 
-impl Vbo {
-    pub fn build(context: &Context, mesh: &Mesh) -> Result<Self, VboError> {
+impl PrimitiveBuffer {
+    pub fn build(context: &Context, mesh: &Mesh) -> Result<Self, BufferError> {
         // Compute an AttributeLayout.
         let layout = compute_layout(&mesh.attributes);
 
@@ -58,7 +58,7 @@ impl Vbo {
             index_count = vert_count;
         }
 
-        Ok(Vbo { 
+        Ok(PrimitiveBuffer { 
             gl: gl.clone(), 
             vert_buffer,
             index_buffer,
@@ -69,7 +69,7 @@ impl Vbo {
     }
 }
 
-impl Drop for Vbo {
+impl Drop for PrimitiveBuffer {
     fn drop(&mut self) {
         self.gl.delete_buffer(Some(&self.vert_buffer));
 
@@ -80,12 +80,11 @@ impl Drop for Vbo {
 }
 
 fn compute_layout(attributes: &IndexMap<AttributeName, AttributeVec>) -> AttributeLayout {
-    // Sort indices in reversed byte order.
+    // Compute the memory order by sorting attributes from largest to smallest.
     let mut order = (0..attributes.len()).collect::<Vec<_>>();
     order.sort_unstable_by_key(|&i| -(attributes[i].type_().byte_count() as isize));
 
-    // Assign offsets by building a map with all zeroes, then populating them in sorted order. 
-    // This causes our IndexMap order to match our argument's.
+    // Assign offsets in memory order.
     let mut types_offsets = attributes
         .iter()
         .map(|(n, attr) | (n.clone(), (attr.type_(), 0)))
@@ -104,8 +103,8 @@ fn compute_layout(attributes: &IndexMap<AttributeName, AttributeVec>) -> Attribu
     AttributeLayout { types_offsets, stride }
 }
 
-fn create_buffer(gl: &WebGl2RenderingContext, target: u32, data: &[u8]) -> Result<WebGlBuffer, VboError> {
-    let buf = gl.create_buffer().ok_or(VboError::CreateFailed)?;
+fn create_buffer(gl: &WebGl2RenderingContext, target: u32, data: &[u8]) -> Result<WebGlBuffer, BufferError> {
+    let buf = gl.create_buffer().ok_or(BufferError::CreateFailed)?;
     gl.bind_buffer(target, Some(&buf));
     gl.buffer_data_with_array_buffer_view(
         target,

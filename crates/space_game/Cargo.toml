@@ -36,6 +36,7 @@ features = [
   'KeyboardEvent',
   'MouseEvent',
   'WebGlBuffer',
+  'WebGlFramebuffer',
   'WebGlVertexArrayObject',
   'WebGl2RenderingContext',
   'WebGlProgram',
