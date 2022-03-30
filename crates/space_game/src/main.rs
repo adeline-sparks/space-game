@@ -3,7 +3,7 @@ use std::f64::consts::PI;
 
 use dom::{open_websocket, spawn, InputEventListener, Key};
 use futures::FutureExt;
-use gl::{Context, Sampler2D, Shader, Texture, DrawPrimitives, PrimitiveBuffer, ShaderLoader};
+use gl::{Context, Shader, Texture, DrawPrimitives, PrimitiveBuffer, ShaderLoader};
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector3};
 
@@ -87,22 +87,26 @@ async fn main_render() -> anyhow::Result<()> {
         "res/test.frag.glsl",
     ).await?;
 
-    let vao = DrawPrimitives::build(&context, &shader, &vbo)?;
+    let vao = DrawPrimitives::build(
+        &context, 
+        &shader, 
+        &vbo, 
+        &[
+            ("tex_color", &color_texture), 
+            ("tex_normal", &normal_texture)
+        ]
+    )?;
 
     let model_view_projection_loc =
         shader.uniform::<Matrix4<f32>>("model_view_projection")?;
     let model_matrix_loc = shader.uniform::<Matrix4<f32>>("model_matrix")?;
     let normal_matrix_loc = shader.uniform::<Matrix4<f32>>("normal_matrix")?;
-    let tex_color = shader.uniform::<Sampler2D>("tex_color")?;
-    let tex_normal = shader.uniform::<Sampler2D>("tex_normal")?;
     let tex_scale_loc = shader.uniform::<f32>("tex_scale")?;
     let tex_blend_sharpness_loc = shader.uniform::<f32>("tex_blend_sharpness")?;
     let light_dir_loc = shader.uniform::<Vector3<f32>>("light_dir").ok();
 
     tex_scale_loc.set(&0.1);
     tex_blend_sharpness_loc.set(&4.0);
-    tex_color.set(&Sampler2D(0));
-    tex_normal.set(&Sampler2D(1));
 
     let canvas = context.canvas();
     let aspect_ratio = (canvas.width() as f64) / (canvas.height() as f64);
@@ -165,10 +169,7 @@ async fn main_render() -> anyhow::Result<()> {
         if let Some(loc) = &light_dir_loc {
             loc.set(&light_dir.cast());
         }
-        context.draw(
-            &[&color_texture, &normal_texture],
-            &vao,
-        );
+        vao.draw();
     }
 }
 

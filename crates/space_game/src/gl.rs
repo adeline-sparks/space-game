@@ -4,7 +4,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::dom::{self, DomError};
-use crate::mesh::{AttributeType, PrimitiveType};
+use crate::mesh::{AttributeType};
 
 mod shader;
 mod texture;
@@ -51,10 +51,6 @@ impl Context {
         self.gl.clear(
             WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
         );
-    }
-
-    pub fn draw(&self, textures: &[&Texture], vao: &DrawPrimitives) {
-
     }
 }
 

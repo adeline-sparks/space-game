@@ -1,11 +1,12 @@
 use thiserror::Error;
 use wasm_bindgen::JsCast;
-use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject, WebGlProgram, HtmlCanvasElement};
+use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject, WebGlProgram, HtmlCanvasElement, WebGlTexture};
 
 use crate::gl::{webgl_scalar_count, webgl_scalar_type, Context};
 use crate::mesh::{PrimitiveType, AttributeName};
 
-use super::{Shader, Texture};
+use super::shader::ShaderError;
+use super::{Shader, Texture, Sampler2D};
 use super::buffer::PrimitiveBuffer;
 
 pub struct DrawPrimitives {
@@ -13,6 +14,7 @@ pub struct DrawPrimitives {
     pub(super) vao: WebGlVertexArrayObject,
     pub(super) program: WebGlProgram,
     pub(super) primitive_type: PrimitiveType,
+    pub(super) textures: Vec<WebGlTexture>,
     pub(super) index_count: usize,
     pub(super) indexed: bool,
 }
@@ -23,6 +25,8 @@ pub enum DrawError {
     CreateVertexArrayFailed,
     #[error("Shader expects unknown attribute `{0}`")]
     UnknownAttribute(AttributeName),
+    #[error(transparent)]
+    ShaderError(#[from] ShaderError),
 }
 
 impl DrawPrimitives {
@@ -30,6 +34,7 @@ impl DrawPrimitives {
         context: &Context,
         shader: &Shader,
         vbo: &PrimitiveBuffer,
+        textures: &[(&str, &Texture)],
     ) -> Result<Self, DrawError> {
         let gl = &context.gl;
         let vao = gl
@@ -66,17 +71,23 @@ impl DrawPrimitives {
             );
         }
 
+        for (i, &(name, _)) in textures.iter().enumerate() {
+            shader.uniform(name)?.set(&Sampler2D(i as u32));
+        }
+        let textures = textures.iter().map(|&(_, t)| t.texture.clone()).collect();
+
         Ok(DrawPrimitives {
             gl: gl.clone(),
             vao,
             program: shader.program.clone(),
             primitive_type: vbo.primitive_type,
+            textures,
             index_count: vbo.index_count,
             indexed: vbo.index_buffer.is_some(),
         })
     }
 
-    pub fn draw(&self, textures: &[&Texture]) {
+    pub fn draw(&self) {
         let canvas: HtmlCanvasElement = self.gl.canvas().unwrap().dyn_into().unwrap();
         self.gl.enable(WebGl2RenderingContext::DEPTH_TEST);
         self.gl.enable(WebGl2RenderingContext::CULL_FACE);
@@ -90,9 +101,9 @@ impl DrawPrimitives {
         self.gl.use_program(Some(&self.program));
         self.gl.bind_vertex_array(Some(&self.vao));
 
-        for (i, &texture) in textures.iter().enumerate() {
+        for (i, texture) in self.textures.iter().enumerate() {
             self.gl.active_texture(WebGl2RenderingContext::TEXTURE0 + (i as u32));
-            self.gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture.texture));
+            self.gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
         }
 
         let mode = match self.primitive_type {
