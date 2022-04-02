@@ -1,7 +1,7 @@
 use wgpu::{
     Backends, Color, DeviceDescriptor, Features, Instance, Limits, LoadOp, Operations, PresentMode,
     RenderPassColorAttachment, RenderPassDescriptor, SurfaceConfiguration, TextureUsages,
-    TextureViewDescriptor,
+    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl,
 };
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -57,6 +57,31 @@ fn main() {
         };
         surface.configure(&device, &surface_config);
 
+        let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: None,
+            layout: None,
+            vertex: VertexState { 
+                module: &module, 
+                entry_point: "vert_main", 
+                buffers: &[],
+            },
+            primitive: PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+            fragment: Some(FragmentState {
+                module: &module,
+                entry_point: "frag_main",
+                targets: &[ColorTargetState {
+                    format: surface_config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                }],
+            }),
+            multiview: None,
+        });
+
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
 
@@ -82,7 +107,7 @@ fn main() {
 
             let mut encoder =
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-            let render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &[RenderPassColorAttachment {
                     view: &surface_view,
@@ -99,6 +124,8 @@ fn main() {
                 }],
                 depth_stencil_attachment: None,
             });
+            render_pass.set_pipeline(&pipeline);
+            render_pass.draw(0..3, 0..1);
             drop(render_pass);
 
             queue.submit([encoder.finish()]);
