@@ -4,7 +4,18 @@ use winit::{
     window::WindowBuilder,
 };
 
+use log::info;
+
 fn main() {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        env_logger::init();
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        console_log::init().expect("error initializing logger");
+    }
+
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
@@ -19,14 +30,13 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit
+        if let Event::WindowEvent { window_id, event } = &event {
+            assert!(window_id == &window.id());
+            info!("Got event: {event:?}");
+
+            if event == &WindowEvent::CloseRequested {
+                *control_flow = ControlFlow::Exit;
             }
-            _ => (),
         }
     });
 }
