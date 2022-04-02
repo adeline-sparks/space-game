@@ -1,6 +1,6 @@
 use slotmap::{new_key_type, SlotMap};
 
-use super::{State, Topic, HandlerGroup, Subscriber, Writer};
+use super::{HandlerGroup, State, Subscriber, Topic, Writer};
 
 new_key_type! {
     pub struct EntityId;
@@ -12,11 +12,11 @@ pub struct Archetype;
 
 #[derive(Debug)]
 pub struct CreateEntity(ArchetypeId);
-impl Topic for CreateEntity { }
+impl Topic for CreateEntity {}
 
 #[derive(Debug)]
 pub struct DestroyEntity(EntityId);
-impl Topic for DestroyEntity { }
+impl Topic for DestroyEntity {}
 
 #[derive(Default, Clone)]
 pub struct EntityState {
@@ -24,12 +24,15 @@ pub struct EntityState {
     #[allow(unused)]
     archetype_map: SlotMap<ArchetypeId, Archetype>,
 }
-impl State for EntityState { }
+impl State for EntityState {}
 
 impl HandlerGroup for EntityState {
     fn add_group(builder: super::reactor::ReactorBuilder) -> super::reactor::ReactorBuilder {
-        builder
-            .add_global(|creates: Subscriber<CreateEntity>, destroys: Subscriber<DestroyEntity>, mut state: Writer<EntityState>| -> anyhow::Result<()> {
+        builder.add_global(
+            |creates: Subscriber<CreateEntity>,
+             destroys: Subscriber<DestroyEntity>,
+             mut state: Writer<EntityState>|
+             -> anyhow::Result<()> {
                 for destroy in destroys.iter() {
                     state.entity_map.remove(destroy.0);
                 }
@@ -38,6 +41,7 @@ impl HandlerGroup for EntityState {
                 }
 
                 Ok(())
-            })
+            },
+        )
     }
 }

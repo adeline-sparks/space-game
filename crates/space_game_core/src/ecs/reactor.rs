@@ -13,7 +13,7 @@ use crate::ecs::state::StateId;
 use crate::ecs::topic::TopicId;
 
 use super::event::{AnyEvent, Event, EventId, EventQueue};
-use super::handler::{Context, Handler, EventHandlerFn, HandlerFn};
+use super::handler::{Context, EventHandlerFn, Handler, HandlerFn};
 use super::state::StateContainer;
 use super::topic::TopicContainer;
 
@@ -116,7 +116,10 @@ pub trait HandlerGroup {
 impl ReactorBuilder {
     /// TODO
     pub fn add<E: Event, Args>(mut self, f: impl EventHandlerFn<E, Args>) -> Self {
-        self.event_handlers.entry(E::id()).or_default().push(f.into_handler());
+        self.event_handlers
+            .entry(E::id())
+            .or_default()
+            .push(f.into_handler());
         self
     }
 
@@ -135,16 +138,15 @@ impl ReactorBuilder {
     pub fn build(self) -> Result<Reactor, BuildReactorError> {
         let mut event_dispatch_order = HashMap::new();
         for (event_id, handlers) in &self.event_handlers {
-            let all_handlers = 
-                self.global_handlers
-                    .iter()
-                    .chain(handlers)
-                    .collect::<Vec<_>>();
+            let all_handlers = self
+                .global_handlers
+                .iter()
+                .chain(handlers)
+                .collect::<Vec<_>>();
 
-            let mut order = 
-                compute_execution_order(&all_handlers)
+            let mut order = compute_execution_order(&all_handlers)
                 .map_err(|err| BuildReactorError::Cycle(event_id.clone(), err))?;
-            
+
             let offset = all_handlers.len();
             let end_of_global_handlers = self.global_handlers.len();
             for idx in &mut order {
@@ -157,8 +159,11 @@ impl ReactorBuilder {
 
         let mut handlers = self.global_handlers;
         handlers.extend(self.event_handlers.into_values().flatten());
-        
-        Ok(Reactor { handlers, event_dispatch_order })
+
+        Ok(Reactor {
+            handlers,
+            event_dispatch_order,
+        })
     }
 }
 
@@ -181,9 +186,7 @@ impl Display for CyclicDependenciesError {
 }
 
 /// TODO
-fn compute_execution_order(
-    handlers: &[&Handler],
-) -> Result<Vec<usize>, CyclicDependenciesError> {
+fn compute_execution_order(handlers: &[&Handler]) -> Result<Vec<usize>, CyclicDependenciesError> {
     /// Node type for the dependency graph.
     enum Node {
         /// Node represents the handler at the given index in `handlers`.
