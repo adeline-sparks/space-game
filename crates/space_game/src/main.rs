@@ -1,9 +1,11 @@
-use wgpu::{Backends, Instance};
+use wgpu::{
+    Backends, Color, DeviceDescriptor, Features, Instance, Limits, LoadOp, Operations, PresentMode,
+    RenderPassColorAttachment, RenderPassDescriptor, SurfaceConfiguration, TextureUsages,
+    TextureViewDescriptor,
+};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
-
-use log::info;
 
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
@@ -34,19 +36,73 @@ fn main() {
             wgpu::util::initialize_adapter_from_env_or_default(&instance, backends, Some(&surface))
                 .await
                 .expect("error finding adapter");
-        let adapter_info = adapter.get_info();
-        info!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
+
+        let device_desc = DeviceDescriptor {
+            label: None,
+            features: Features::empty(),
+            limits: Limits::downlevel_webgl2_defaults(),
+        };
+        let (device, queue) = adapter
+            .request_device(&device_desc, None)
+            .await
+            .expect("error requesting device");
+
+        let size = window.inner_size();
+        let surface_config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            format: surface.get_preferred_format(&adapter).unwrap(),
+            width: size.width,
+            height: size.height,
+            present_mode: PresentMode::Fifo,
+        };
+        surface.configure(&device, &surface_config);
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
 
-            if let Event::WindowEvent { window_id, event } = &event {
-                assert!(window_id == &window.id());
-
-                if event == &WindowEvent::CloseRequested {
-                    *control_flow = ControlFlow::Exit;
+            if matches!(
+                &event,
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
                 }
+            ) {
+                *control_flow = ControlFlow::Exit;
+                return;
             }
+
+            if !matches!(&event, Event::RedrawRequested(_)) {
+                return;
+            }
+
+            let surface_texture = surface.get_current_texture().unwrap();
+            let surface_view = surface_texture
+                .texture
+                .create_view(&TextureViewDescriptor::default());
+
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            let render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: None,
+                color_attachments: &[RenderPassColorAttachment {
+                    view: &surface_view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+            drop(render_pass);
+
+            queue.submit([encoder.finish()]);
+            surface_texture.present();
         });
     };
 
