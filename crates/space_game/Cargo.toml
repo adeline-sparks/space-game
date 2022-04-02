@@ -3,49 +3,13 @@ name = 'space_game'
 version = '0.1.0'
 edition = '2021'
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 space_game_core = { path = '../space_game_core' }
 
 nalgebra = { version = "0.30.1", features = ["bytemuck"] }
-futures = '0.3'
 once_cell = '1'
 bytemuck = '1'
 anyhow = {version = '1', features = ['backtrace'] }
 thiserror = '1'
 indexmap = '1'
-async-recursion = '1'
-
-console_error_panic_hook = '0.1'
 log = '0.4'
-console_log = '0.2'
-wasm-bindgen = '0.2'
-wasm-bindgen-futures = '0.4'
-js-sys = '0.3'
-
-[dependencies.web-sys]
-version = '0.3'
-features = [
-  'AddEventListenerOptions',
-  'BinaryType',
-  'Document',
-  'Element',
-  'HtmlCanvasElement',
-  'HtmlImageElement',
-  'KeyboardEvent',
-  'MouseEvent',
-  'WebGlBuffer',
-  'WebGlFramebuffer',
-  'WebGlVertexArrayObject',
-  'WebGl2RenderingContext',
-  'WebGlProgram',
-  'WebGlActiveInfo',
-  'WebGlShader',
-  'WebGlTexture',
-  'WebGlUniformLocation',  
-  'WebSocket',
-  'WheelEvent',
-  'Window',
-  'XmlHttpRequest',
-]
