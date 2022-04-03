@@ -1,3 +1,8 @@
+[[group(0), binding(0)]]
+var starmap_tex: texture_2d<f32>;
+[[group(0), binding(1)]]
+var starmap_sampler: sampler;
+
 [[stage(vertex)]]
 fn vert_main(
     [[builtin(vertex_index)]] vertex_index: u32,
@@ -13,12 +18,8 @@ fn vert_main(
 
 [[stage(fragment)]]
 fn frag_main(
-    [[builtin(position)]] position: vec4<f32>,
+    [[builtin(position)]] frag_pos: vec4<f32>,
 ) -> [[location(0)]] vec4<f32> {
-    var color: vec4<f32>;
-    color.r = position.x / 1024.0;
-    color.g = position.y / 768.0;
-    color.b = 0.2;
-    color.a = 1.0;
-    return color;
+    let pos = frag_pos.xy / vec2<f32>(1024.0, 768.0);
+    return textureLoad(starmap_tex, vec2<i32>(pos * vec2<f32>(4096.0, 2048.0)), 0);
 }
