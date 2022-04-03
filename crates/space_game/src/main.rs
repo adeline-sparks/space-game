@@ -1,13 +1,17 @@
 use std::io::Cursor;
-use std::num::NonZeroU32;
+use std::mem::size_of;
+use std::num::{NonZeroU32, NonZeroU64};
+use std::slice;
 
-use bytemuck::{cast_slice};
+use bytemuck::{cast_slice, Pod, Zeroable};
 use exr::prelude::{ReadChannels, ReadLayers};
-use nalgebra::Vector2;
+use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
+use once_cell::sync::Lazy;
+use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use wgpu::{
     Backends, Color, DeviceDescriptor, Features, Instance, Limits, LoadOp, Operations, PresentMode,
     RenderPassColorAttachment, RenderPassDescriptor, SurfaceConfiguration, TextureUsages,
-    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor,
+    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding,
 };
 use winit::dpi::{PhysicalSize};
 use winit::event::{Event, WindowEvent};
@@ -67,6 +71,28 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         border_color: None,
     });
 
+    #[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
+    #[repr(C)]
+    struct Camera {
+        inv_view_projection: Matrix4<f32>,
+        viewport: Vector2<f32>,
+        near: f32,
+        far: f32,
+    }
+
+    let camera_buffer = device.create_buffer(&BufferDescriptor { 
+        label: None, 
+        size: size_of::<Camera>() as u64, 
+        usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM, 
+        mapped_at_creation: false,
+    });
+
+    let quad_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        contents: cast_slice::<u16, _>(&[0, 1, 2, 2, 3, 0]),
+        usage: BufferUsages::INDEX,
+    });
+
     let bindgroup_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: None,
         entries: &[
@@ -86,6 +112,16 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                 count: None,
             },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer { 
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false, 
+                    min_binding_size: NonZeroU64::new(size_of::<Camera>() as u64),
+                },
+                count: None,
+            },
         ],
     });
     let bindgroup = device.create_bind_group(&BindGroupDescriptor {
@@ -99,7 +135,15 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
             BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(&sampler),
-            }
+            },
+            BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Buffer(BufferBinding {
+                    buffer: &camera_buffer,
+                    offset: 0,
+                    size: None,
+                }),
+            },
         ],
     });
 
@@ -131,23 +175,40 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         multiview: None,
     });
 
+    let mut camera = Camera::default();
+    let mut view = Isometry3::<f64>::default();
+    let projection = Perspective3::new(
+        surface_config.height as f64 / surface_config.width as f64,
+        (60.0f64).to_radians(),
+        1.0,
+        10.0,
+    );
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        if matches!(
-            &event,
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            }
-        ) {
+        if matches!(&event, Event::WindowEvent { event: WindowEvent::CloseRequested, .. }) {
             *control_flow = ControlFlow::Exit;
+            return;
+        }
+
+        if event == Event::RedrawEventsCleared {
+            window.request_redraw();
             return;
         }
 
         if !matches!(&event, Event::RedrawRequested(_)) {
             return;
         }
+
+        view.append_rotation_mut(&UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.001f64));
+        camera.viewport.x = surface_config.width as f32;
+        camera.viewport.y = surface_config.height as f32;
+        camera.near = projection.znear() as f32;
+        camera.far = projection.zfar() as f32;
+        camera.inv_view_projection = (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast();
+
+        queue.write_buffer(&camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
 
         let surface_texture = surface.get_current_texture().unwrap();
         let surface_view = surface_texture
@@ -175,7 +236,8 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         });
         render_pass.set_pipeline(&pipeline);
         render_pass.set_bind_group(0, &bindgroup, &[]);
-        render_pass.draw(0..3, 0..1);
+        render_pass.set_index_buffer(quad_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..6, 0, 0..1);
         drop(render_pass);
 
         queue.submit([encoder.finish()]);
@@ -279,3 +341,14 @@ async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
     File::open(format!("crates/space_game/{path}"))?.read_to_end(&mut buf)?;
     Ok(buf)
 }
+
+static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.0, 0.0, 0.5, 1.0,
+);
+
+static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> = Lazy::new(|| {
+    OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap()
+});
