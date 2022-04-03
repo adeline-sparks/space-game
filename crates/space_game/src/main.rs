@@ -192,7 +192,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
             return;
         }
 
-        if event == Event::RedrawEventsCleared {
+        if event == Event::MainEventsCleared {
             window.request_redraw();
             return;
         }
