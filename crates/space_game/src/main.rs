@@ -5,7 +5,7 @@ use std::slice;
 
 use bytemuck::{cast_slice, Pod, Zeroable};
 use half::f16;
-use image::ImageFormat;
+use image::codecs::hdr::HdrDecoder;
 use log::{warn};
 use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
 use once_cell::sync::Lazy;
@@ -25,38 +25,36 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
     let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
 
-    let starmap_image = 
-        image::io::Reader::with_format(
-            Cursor::new(&load_res("res/starmap_2020.hdr").await?.as_slice()),
-            ImageFormat::Hdr,
-        )
-        .decode()?
-        .to_rgb32f();
+    let starmap_res = load_res("res/starmap_2020.hdr").await?;
+    let starmap_decoder = HdrDecoder::new(Cursor::new(starmap_res.as_slice()))?;
+    let starmap_width = starmap_decoder.metadata().width / 6;
+    let starmap_height = starmap_decoder.metadata().height;
+    let starmap_native = starmap_decoder.read_image_native()?;
 
-    let mut starmap_samples_f16 = Vec::with_capacity(
-        (starmap_image.width() as usize) * (starmap_image.height() as usize)
+    let mut starmap_samples = Vec::with_capacity(
+        (6 * starmap_width * starmap_height * 4) as usize
     );
-    let starmap_cube_width = starmap_image.width() / 6;
-
     for z in 0..6 {
-        for y in 0..starmap_image.height() {
-            for x in 0..starmap_cube_width {
-                let p = starmap_image.get_pixel(x + z * starmap_cube_width, y);
+        for y in 0..starmap_height {
+            for x in 0..starmap_width {
+                let pos = x + (z * starmap_width) + (y * 6 * starmap_width);
+                let pixel = starmap_native[pos as usize].to_hdr();
                 for ch in 0..3 {
-                    starmap_samples_f16.push(f16::from_f32(p[ch]));
+                    starmap_samples.push(f16::from_f32(pixel[ch as usize]));
                 }
-                starmap_samples_f16.push(f16::default());
+                starmap_samples.push(f16::default());
             }
         }
     }
+    drop(starmap_native);
 
     let starmap_tex = device.create_texture_with_data(
         &queue,
         &TextureDescriptor {
             label: None,
             size: Extent3d { 
-                width: starmap_cube_width, 
-                height: starmap_image.height(), 
+                width: starmap_width, 
+                height: starmap_height, 
                 depth_or_array_layers: 6,
             },
             mip_level_count: 1,
@@ -65,9 +63,9 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
             format: TextureFormat::Rgba16Float,
             usage: TextureUsages::TEXTURE_BINDING,
         },
-        cast_slice(starmap_samples_f16.as_slice())
+        cast_slice(starmap_samples.as_slice())
     );
-    drop(starmap_samples_f16);
+    drop(starmap_samples);
 
     let starmap_view = starmap_tex.create_view(&wgpu::TextureViewDescriptor {
         label: None,
