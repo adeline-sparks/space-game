@@ -62,8 +62,8 @@ fn frag_main(
 ) -> [[location(0)]] vec4<f32> {
     let pos = vec2<f32>(
         atan2(vert.world_ray.x, vert.world_ray.z) / tau + 0.5,
-        atan(vert.world_ray.y / length(vert.world_ray.xz)) / pi + 0.5,
+        atan(-vert.world_ray.y / length(vert.world_ray.xz)) / pi + 0.5,
     );
 
-    return textureLoad(starmap_tex, vec2<i32>(pos * vec2<f32>(4096.0, 2048.0)), 0);
+    return textureSample(starmap_tex, starmap_sampler, pos);
 }

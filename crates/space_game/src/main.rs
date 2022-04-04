@@ -5,6 +5,7 @@ use std::slice;
 
 use bytemuck::{cast_slice, Pod, Zeroable};
 use exr::prelude::{ReadChannels, ReadLayers};
+use half::f16;
 use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
 use once_cell::sync::Lazy;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
@@ -35,10 +36,11 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
-        format: TextureFormat::Rgba32Float,
+        format: TextureFormat::Rgba16Float,
         usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
     });
 
+    let f16_data = starmap_image.data.iter().cloned().map(f16::from_f32).collect::<Vec<_>>();
     queue.write_texture(
         ImageCopyTexture {
             texture: &starmap_tex,
@@ -46,10 +48,10 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
             origin: Origin3d::ZERO,
             aspect: TextureAspect::All,
         }, 
-        cast_slice(starmap_image.data.as_slice()), 
+        cast_slice(f16_data.as_slice()), 
         ImageDataLayout { 
             offset: 0, 
-            bytes_per_row: NonZeroU32::new(4 * 4 * starmap_image.size.x), 
+            bytes_per_row: NonZeroU32::new(2 * 4 * starmap_image.size.x), 
             rows_per_image: NonZeroU32::new(starmap_image.size.y),
         },
         starmap_tex_size,
@@ -58,12 +60,12 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
 
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: None,
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_u: wgpu::AddressMode::Repeat,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Nearest,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Linear,
         lod_min_clamp: 0.0,
         lod_max_clamp: 0.0,
         compare: None,
@@ -100,7 +102,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 binding: 0,
                 visibility: ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture { 
-                    sample_type: TextureSampleType::Float { filterable: false }, 
+                    sample_type: TextureSampleType::Float { filterable: true }, 
                     view_dimension: wgpu::TextureViewDimension::D2, 
                     multisampled: false,
                 },
