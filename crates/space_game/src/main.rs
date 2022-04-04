@@ -25,7 +25,9 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
     let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
 
+    info!("Begin read_exr");
     let starmap_image = read_exr(load_res("res/starmap_2020_cubemap.exr").await?.as_slice())?;
+    info!("End read_exr");
     let starmap_tex_size = Extent3d {
         width: starmap_image.size.y,
         height: starmap_image.size.y,
@@ -231,7 +233,6 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 ..
             }, ..} | 
             Event::WindowEvent { event: WindowEvent::Focused(false), .. } => {
-                info!("Escape {grabbed}");
                 if grabbed {
                     grabbed = false;
                     if let Err(err) = window.set_cursor_grab(false) {
@@ -328,7 +329,7 @@ async fn init_wgpu(window: &Window) -> anyhow::Result<(Device, Queue, Surface, S
     let device_desc = DeviceDescriptor {
         label: None,
         features: Features::empty(),
-        limits: Limits::default(),
+        limits: Limits::downlevel_webgl2_defaults(),
     };
     let (device, queue) = adapter
         .request_device(&device_desc, None)
@@ -375,6 +376,7 @@ fn read_exr(bytes: &[u8]) -> anyhow::Result<Image> {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    use log::error;
     use winit::platform::web::WindowExtWebSys;
 
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -389,7 +391,32 @@ fn main() {
         .and_then(|b| b.append_child(&window.canvas()).ok())
         .expect("error appending canvas to body");
 
-    wasm_bindgen_futures::spawn_local(run(event_loop, window));
+    wasm_bindgen_futures::spawn_local(async { 
+        if let Err(err) = run(event_loop, window).await {
+            error!("{:?}", err);
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::Response;
+    use js_sys::{ArrayBuffer, Uint8Array};
+    use wasm_bindgen::JsCast;
+
+    let window = web_sys::window().ok_or_else(|| anyhow!("error getting window"))?;
+    let response = JsFuture::from(window.fetch_with_str(path)).await
+        .map_err(|_| anyhow!("fetch failed"))?
+        .unchecked_into::<Response>();
+    let array_buffer = 
+        JsFuture::from(
+            response.array_buffer().map_err(|_| anyhow!("array_buffer failed"))?
+        )
+        .await
+        .map_err(|_| anyhow!("array_buffer future failed"))?
+        .unchecked_into::<ArrayBuffer>();
+    Ok(Uint8Array::new(&array_buffer).to_vec())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -409,7 +436,7 @@ async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
     use std::{fs::File, io::Read};
 
     let mut buf = Vec::new();
-    File::open(format!("crates/space_game/{path}"))?.read_to_end(&mut buf)?;
+    File::open(path)?.read_to_end(&mut buf)?;
     Ok(buf)
 }
 

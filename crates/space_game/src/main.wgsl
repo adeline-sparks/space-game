@@ -61,7 +61,8 @@ fn frag_main(
     vert: Vertex,
 ) -> [[location(0)]] vec4<f32> {
     let intensity = textureSample(starmap_tex, starmap_sampler, vert.world_ray).rgb;
-    let reinhart = intensity / (intensity + 1.0);
-    let srgb = pow(reinhart, vec3<f32>(2.2, 2.2, 2.2));
+    let luma = max(intensity.r, max(intensity.g, intensity.b));
+    let ldr = intensity / (1.0 + luma);
+    let srgb = pow(ldr, vec3<f32>(2.2, 2.2, 2.2));
     return vec4<f32>(srgb.r, srgb.g, srgb.b, 1.0);
 }
