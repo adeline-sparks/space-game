@@ -197,7 +197,6 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         multiview: None,
     });
 
-    let mut camera = Camera::default();
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
         surface_config.height as f64 / surface_config.width as f64,
@@ -269,12 +268,17 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
             }
         }
 
-        camera.viewport.x = surface_config.width as f32;
-        camera.viewport.y = surface_config.height as f32;
-        camera.near = projection.znear() as f32;
-        camera.far = projection.zfar() as f32;
-        camera.inv_view_projection = (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast();
-
+        let camera = Camera {
+            viewport: Vector2::new(
+                surface_config.width as f32,
+                surface_config.height as f32,
+            ),
+            near: projection.znear() as f32,
+            far: projection.zfar() as f32,
+            inv_view_projection: {
+                (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast()
+            },
+        };
         queue.write_buffer(&camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
 
         let surface_texture = surface.get_current_texture().unwrap();
