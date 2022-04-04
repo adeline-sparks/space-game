@@ -6,7 +6,7 @@ use std::slice;
 use bytemuck::{cast_slice, Pod, Zeroable};
 use half::f16;
 use image::codecs::hdr::HdrDecoder;
-use log::{warn};
+use log::{warn, info};
 use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
 use once_cell::sync::Lazy;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
@@ -18,6 +18,7 @@ use wgpu::{
 use winit::dpi::{PhysicalSize};
 use winit::event::{Event, WindowEvent, ElementState, DeviceEvent, VirtualKeyCode, KeyboardInput};
 use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoopWindowTarget;
 use winit::window::{WindowBuilder, Window};
 use anyhow::anyhow;
 
@@ -206,19 +207,20 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     );
 
     let mut grabbed = false;
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+    info!("Initialized");
+    run_event_loop(event_loop, move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
 
-        match &event {
+        match &event {     
             Event::RedrawRequested(_) => {}
             
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                *control_flow = ControlFlow::Exit;
+            Event::MainEventsCleared => {
+                window.request_redraw();
                 return;
             }
 
-            Event::MainEventsCleared => {
-                window.request_redraw();
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
                 return;
             }
 
@@ -313,6 +315,8 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         queue.submit([encoder.finish()]);
         surface_texture.present();
     });
+
+    Ok(())
 }
 
 async fn init_wgpu(window: &Window) -> anyhow::Result<(Device, Queue, Surface, SurfaceConfiguration)> {
@@ -344,6 +348,46 @@ async fn init_wgpu(window: &Window) -> anyhow::Result<(Device, Queue, Surface, S
     surface.configure(&device, &surface_config);
 
     Ok((device, queue, surface, surface_config))
+}
+
+static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.0, 0.0, 0.5, 1.0,
+);
+
+static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> = Lazy::new(|| {
+    OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap()
+});
+
+#[cfg(not(target_arch = "wasm32"))]
+fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_inner_size(PhysicalSize::new(1024*2, 768*2))
+        .build(&event_loop)
+        .unwrap();
+    pollster::block_on(run(event_loop, window))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
+    use std::{fs::File, io::Read};
+
+    let mut buf = Vec::new();
+    File::open(path)?.read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_event_loop(
+    event_loop: EventLoop<()>, 
+    event_handler: impl FnMut(Event<'_, ()>, &EventLoopWindowTarget<()>, &mut ControlFlow) + 'static
+) {
+    event_loop.run(event_handler);
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -391,34 +435,18 @@ async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
     Ok(Uint8Array::new(&array_buffer).to_vec())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
+#[cfg(target_arch = "wasm32")]
+fn run_event_loop(
+    event_loop: EventLoop<()>, 
+    event_handler: impl FnMut(Event<'_, ()>, &EventLoopWindowTarget<()>, &mut ControlFlow) + 'static
+) {
+    use wasm_bindgen::prelude::*;
 
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_inner_size(PhysicalSize::new(1024*2, 768*2))
-        .build(&event_loop)
-        .unwrap();
-    pollster::block_on(run(event_loop, window))
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
+        fn call_catch(this: &JsValue) -> Result<(), JsValue>;
+    }
+
+    let _ = call_catch(&Closure::once_into_js(move || event_loop.run(event_handler)));
 }
-
-#[cfg(not(target_arch = "wasm32"))]
-async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
-    use std::{fs::File, io::Read};
-
-    let mut buf = Vec::new();
-    File::open(path)?.read_to_end(&mut buf)?;
-    Ok(buf)
-}
-
-static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.0,
-    0.0, 0.0, 0.5, 1.0,
-);
-
-static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> = Lazy::new(|| {
-    OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap()
-});
