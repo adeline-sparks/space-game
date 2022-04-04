@@ -52,7 +52,7 @@ fn vert_main(
         vec3<f32>(vert.position.x, vert.position.y, 1.0), 
         camera.inv_view_projection
     );
-    vert.world_ray = normalize(far_world - near_world);
+    vert.world_ray = far_world - near_world;
     return vert;
 }
 

@@ -6,6 +6,7 @@ use std::slice;
 use bytemuck::{cast_slice, Pod, Zeroable};
 use exr::prelude::{ReadChannels, ReadLayers};
 use half::f16;
+use log::{warn, info};
 use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
 use once_cell::sync::Lazy;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
@@ -15,7 +16,7 @@ use wgpu::{
     TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding, TextureViewDimension,
 };
 use winit::dpi::{PhysicalSize};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, ElementState, DeviceEvent, VirtualKeyCode, KeyboardInput};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{WindowBuilder, Window};
 use anyhow::anyhow;
@@ -205,24 +206,69 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
         10.0,
     );
 
+    let mut grabbed = false;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        if matches!(&event, Event::WindowEvent { event: WindowEvent::CloseRequested, .. }) {
-            *control_flow = ControlFlow::Exit;
-            return;
+        match &event {
+            Event::RedrawRequested(_) => {}
+            
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+
+            Event::MainEventsCleared => {
+                window.request_redraw();
+                return;
+            }
+
+            Event::WindowEvent { event: WindowEvent::KeyboardInput { 
+                input: KeyboardInput { 
+                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                    state: ElementState::Pressed,
+                    .. 
+                },
+                ..
+            }, ..} | 
+            Event::WindowEvent { event: WindowEvent::Focused(false), .. } => {
+                info!("Escape {grabbed}");
+                if grabbed {
+                    grabbed = false;
+                    if let Err(err) = window.set_cursor_grab(false) {
+                        warn!("error releasing cursor: {err}");
+                    }
+                }
+
+                return;
+            }
+
+            Event::WindowEvent { event: WindowEvent::MouseInput { state: ElementState::Pressed, .. }, .. } => {
+                if !grabbed {
+                    if let Err(err) = window.set_cursor_grab(true) {
+                        warn!("error grabbing cursor: {err}");
+                        return;
+                    }
+                   
+                    grabbed = true;
+                }
+            }
+
+            Event::DeviceEvent { event: DeviceEvent::MouseMotion { delta }, .. } => {
+                if !grabbed {
+                    return;
+                }
+
+                view.append_rotation_mut(&UnitQuaternion::from_scaled_axis(
+                    Vector3::new(delta.1, delta.0, 0.0) / 1000.0));
+                return;
+            }
+
+            _ => {
+                return;
+            }
         }
 
-        if event == Event::MainEventsCleared {
-            window.request_redraw();
-            return;
-        }
-
-        if !matches!(&event, Event::RedrawRequested(_)) {
-            return;
-        }
-
-        view.append_rotation_mut(&UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.001f64));
         camera.viewport.x = surface_config.width as f32;
         camera.viewport.y = surface_config.height as f32;
         camera.near = projection.znear() as f32;
@@ -348,7 +394,7 @@ fn main() -> anyhow::Result<()> {
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_inner_size(PhysicalSize::new(1024, 768))
+        .with_inner_size(PhysicalSize::new(1024*2, 768*2))
         .build(&event_loop)
         .unwrap();
     pollster::block_on(run(event_loop, window))
