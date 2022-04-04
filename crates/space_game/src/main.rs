@@ -12,7 +12,7 @@ use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use wgpu::{
     Backends, Color, DeviceDescriptor, Features, Instance, Limits, LoadOp, Operations, PresentMode,
     RenderPassColorAttachment, RenderPassDescriptor, SurfaceConfiguration, TextureUsages,
-    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding,
+    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding, TextureViewDimension,
 };
 use winit::dpi::{PhysicalSize};
 use winit::event::{Event, WindowEvent};
@@ -24,11 +24,11 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
     let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
 
-    let starmap_image = read_exr(load_res("res/starmap_2020_4k.exr").await?.as_slice())?;
+    let starmap_image = read_exr(load_res("res/starmap_2020_cubemap.exr").await?.as_slice())?;
     let starmap_tex_size = Extent3d {
-        width: starmap_image.size.x,
+        width: starmap_image.size.y,
         height: starmap_image.size.y,
-        depth_or_array_layers: 1,
+        depth_or_array_layers: 6,
     };
     let starmap_tex = device.create_texture(&TextureDescriptor {
         label: None,
@@ -41,26 +41,45 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     });
 
     let f16_data = starmap_image.data.iter().cloned().map(f16::from_f32).collect::<Vec<_>>();
-    queue.write_texture(
-        ImageCopyTexture {
-            texture: &starmap_tex,
-            mip_level: 0,
-            origin: Origin3d::ZERO,
-            aspect: TextureAspect::All,
-        }, 
-        cast_slice(f16_data.as_slice()), 
-        ImageDataLayout { 
-            offset: 0, 
-            bytes_per_row: NonZeroU32::new(2 * 4 * starmap_image.size.x), 
-            rows_per_image: NonZeroU32::new(starmap_image.size.y),
-        },
-        starmap_tex_size,
-    );
-    let starmap_view = starmap_tex.create_view(&wgpu::TextureViewDescriptor::default());
+    for z in 0..6 {
+        queue.write_texture(
+            ImageCopyTexture {
+                texture: &starmap_tex,
+                mip_level: 0,
+                origin: Origin3d { 
+                    x: 0, 
+                    y: 0, 
+                    z 
+                },
+                aspect: TextureAspect::All,
+            }, 
+            cast_slice(f16_data.as_slice()), 
+            ImageDataLayout { 
+                offset: (2 * 4 * starmap_tex_size.width * z) as u64, 
+                bytes_per_row: NonZeroU32::new(2 * 4 * starmap_image.size.x), 
+                rows_per_image: None,
+            },
+            Extent3d {
+                width: starmap_tex_size.width,
+                height: starmap_tex_size.height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+    let starmap_view = starmap_tex.create_view(&wgpu::TextureViewDescriptor {
+        label: None,
+        format: Some(TextureFormat::Rgba16Float),
+        dimension: Some(TextureViewDimension::Cube),
+        aspect: TextureAspect::All,
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: NonZeroU32::new(6),
+    });
 
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: None,
-        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
         mag_filter: wgpu::FilterMode::Linear,
@@ -103,7 +122,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 visibility: ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture { 
                     sample_type: TextureSampleType::Float { filterable: true }, 
-                    view_dimension: wgpu::TextureViewDimension::D2, 
+                    view_dimension: wgpu::TextureViewDimension::Cube, 
                     multisampled: false,
                 },
                 count: None,

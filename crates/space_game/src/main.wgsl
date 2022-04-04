@@ -9,7 +9,7 @@ var<private> tau: f32 = 6.28318530717958647692528676655900577;
 var<private> pi: f32 = 3.14159265358979323846264338327950288;
 
 [[group(0), binding(0)]]
-var starmap_tex: texture_2d<f32>;
+var starmap_tex: texture_cube<f32>;
 [[group(0), binding(1)]]
 var starmap_sampler: sampler;
 [[group(0), binding(2)]]
@@ -60,10 +60,5 @@ fn vert_main(
 fn frag_main(
     vert: Vertex,
 ) -> [[location(0)]] vec4<f32> {
-    let pos = vec2<f32>(
-        atan2(vert.world_ray.x, vert.world_ray.z) / tau + 0.5,
-        atan(-vert.world_ray.y / length(vert.world_ray.xz)) / pi + 0.5,
-    );
-
-    return textureSample(starmap_tex, starmap_sampler, pos);
+    return textureSample(starmap_tex, starmap_sampler, vert.world_ray);
 }
