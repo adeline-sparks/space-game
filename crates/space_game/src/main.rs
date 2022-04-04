@@ -4,16 +4,16 @@ use std::num::{NonZeroU32, NonZeroU64};
 use std::slice;
 
 use bytemuck::{cast_slice, Pod, Zeroable};
-use exr::prelude::{ReadChannels, ReadLayers};
 use half::f16;
-use log::{warn, info};
+use image::ImageFormat;
+use log::{warn};
 use nalgebra::{Vector2, Matrix4, Perspective3, Isometry3, UnitQuaternion, Vector3};
 use once_cell::sync::Lazy;
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use wgpu::{
     Backends, Color, DeviceDescriptor, Features, Instance, Limits, LoadOp, Operations, PresentMode,
     RenderPassColorAttachment, RenderPassDescriptor, SurfaceConfiguration, TextureUsages,
-    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, ImageCopyTexture, TextureAspect, Origin3d, ImageDataLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding, TextureViewDimension,
+    TextureViewDescriptor, RenderPipelineDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, include_wgsl, Device, Queue, Surface, TextureDescriptor, Extent3d, TextureDimension, TextureFormat, TextureAspect, BindGroupLayoutDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, PipelineLayoutDescriptor, BufferBindingType, BufferUsages, BufferDescriptor, BufferBinding, TextureViewDimension,
 };
 use winit::dpi::{PhysicalSize};
 use winit::event::{Event, WindowEvent, ElementState, DeviceEvent, VirtualKeyCode, KeyboardInput};
@@ -25,50 +25,50 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
     let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
 
-    info!("Begin read_exr");
-    let starmap_image = read_exr(load_res("res/starmap_2020_cubemap.exr").await?.as_slice())?;
-    info!("End read_exr");
-    let starmap_tex_size = Extent3d {
-        width: starmap_image.size.y,
-        height: starmap_image.size.y,
-        depth_or_array_layers: 6,
-    };
-    let starmap_tex = device.create_texture(&TextureDescriptor {
-        label: None,
-        size: starmap_tex_size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        format: TextureFormat::Rgba16Float,
-        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-    });
+    let starmap_image = 
+        image::io::Reader::with_format(
+            Cursor::new(&load_res("res/starmap_2020.hdr").await?.as_slice()),
+            ImageFormat::Hdr,
+        )
+        .decode()?
+        .to_rgb32f();
 
-    let f16_data = starmap_image.data.iter().cloned().map(f16::from_f32).collect::<Vec<_>>();
+    let mut starmap_samples_f16 = Vec::with_capacity(
+        (starmap_image.width() as usize) * (starmap_image.height() as usize)
+    );
+    let starmap_cube_width = starmap_image.width() / 6;
+
     for z in 0..6 {
-        queue.write_texture(
-            ImageCopyTexture {
-                texture: &starmap_tex,
-                mip_level: 0,
-                origin: Origin3d { 
-                    x: 0, 
-                    y: 0, 
-                    z 
-                },
-                aspect: TextureAspect::All,
-            }, 
-            cast_slice(f16_data.as_slice()), 
-            ImageDataLayout { 
-                offset: (2 * 4 * starmap_tex_size.width * z) as u64, 
-                bytes_per_row: NonZeroU32::new(2 * 4 * starmap_image.size.x), 
-                rows_per_image: None,
-            },
-            Extent3d {
-                width: starmap_tex_size.width,
-                height: starmap_tex_size.height,
-                depth_or_array_layers: 1,
-            },
-        );
+        for y in 0..starmap_image.height() {
+            for x in 0..starmap_cube_width {
+                let p = starmap_image.get_pixel(x + z * starmap_cube_width, y);
+                for ch in 0..3 {
+                    starmap_samples_f16.push(f16::from_f32(p[ch]));
+                }
+                starmap_samples_f16.push(f16::default());
+            }
+        }
     }
+
+    let starmap_tex = device.create_texture_with_data(
+        &queue,
+        &TextureDescriptor {
+            label: None,
+            size: Extent3d { 
+                width: starmap_cube_width, 
+                height: starmap_image.height(), 
+                depth_or_array_layers: 6,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            usage: TextureUsages::TEXTURE_BINDING,
+        },
+        cast_slice(starmap_samples_f16.as_slice())
+    );
+    drop(starmap_samples_f16);
+
     let starmap_view = starmap_tex.create_view(&wgpu::TextureViewDescriptor {
         label: None,
         format: Some(TextureFormat::Rgba16Float),
@@ -346,32 +346,6 @@ async fn init_wgpu(window: &Window) -> anyhow::Result<(Device, Queue, Surface, S
     surface.configure(&device, &surface_config);
 
     Ok((device, queue, surface, surface_config))
-}
-
-struct Image {
-    data: Vec<f32>,
-    size: Vector2<u32>,
-}
-
-fn read_exr(bytes: &[u8]) -> anyhow::Result<Image> {
-    Ok(exr::prelude::read()
-        .no_deep_data()
-        .largest_resolution_level()
-        .rgba_channels(|dims, _| Image {
-            data: vec![0f32; 4 * dims.area()],
-            size: Vector2::new(dims.width() as u32, dims.height() as u32),
-        }, 
-        |image, coord, (r, g, b, a)| {
-            let pos = 4 * (coord.x() + (image.size.x as usize) * coord.y());
-            image.data[pos..pos+4].copy_from_slice(&[r, g, b, a]);
-        })
-        .first_valid_layer()
-        .all_attributes()
-        .from_buffered(Cursor::new(bytes))?
-        .layer_data
-        .channel_data
-        .pixels
-    )
 }
 
 #[cfg(target_arch = "wasm32")]

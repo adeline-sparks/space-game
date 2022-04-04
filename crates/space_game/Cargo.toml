@@ -21,7 +21,7 @@ indexmap = '1'
 log = '0.4'
 once_cell = '1'
 thiserror = '1'
-exr = '1'
+image = '0.24'
 
 # Native
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
