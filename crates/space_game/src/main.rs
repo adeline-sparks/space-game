@@ -12,12 +12,17 @@ use wgpu::{
     Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Features, Instance, Limits,
     PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
 };
-use winit::dpi::PhysicalSize;
+
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
-use winit::window::{Window, WindowBuilder};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::{Window};
 
 mod galaxy;
+mod plat;
+
+fn main() -> anyhow::Result<()> {
+    plat::do_main()
+}
 
 use galaxy::GalaxyBox;
 
@@ -58,7 +63,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
 
     let mut grabbed = false;
     info!("Initialized");
-    run_event_loop(event_loop, move |event, _, control_flow| {
+    plat::run_event_loop(event_loop, move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match &event {
@@ -203,101 +208,3 @@ static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
 
 static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> =
     Lazy::new(|| OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap());
-
-#[cfg(not(target_arch = "wasm32"))]
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_inner_size(PhysicalSize::new(1024 * 2, 768 * 2))
-        .build(&event_loop)
-        .unwrap();
-    pollster::block_on(run(event_loop, window))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
-    use std::fs::File;
-    use std::io::Read;
-
-    let mut buf = Vec::new();
-    File::open(path)?.read_to_end(&mut buf)?;
-    Ok(buf)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn run_event_loop(
-    event_loop: EventLoop<()>,
-    event_handler: impl FnMut(Event<'_, ()>, &EventLoopWindowTarget<()>, &mut ControlFlow) + 'static,
-) {
-    event_loop.run(event_handler);
-}
-
-#[cfg(target_arch = "wasm32")]
-fn main() {
-    use log::error;
-    use winit::platform::web::WindowExtWebSys;
-
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init().expect("error initializing logger");
-
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_inner_size(PhysicalSize::new(1024, 768))
-        .build(&event_loop)
-        .unwrap();
-
-    web_sys::window()
-        .and_then(|w| w.document())
-        .and_then(|d| d.body())
-        .and_then(|b| b.append_child(&window.canvas()).ok())
-        .expect("error appending canvas to body");
-
-    wasm_bindgen_futures::spawn_local(async {
-        if let Err(err) = run(event_loop, window).await {
-            error!("{:?}", err);
-        }
-    });
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
-    use js_sys::{ArrayBuffer, Uint8Array};
-    use wasm_bindgen::JsCast;
-    use wasm_bindgen_futures::JsFuture;
-    use web_sys::Response;
-
-    let window = web_sys::window().ok_or_else(|| anyhow!("error getting window"))?;
-    let response = JsFuture::from(window.fetch_with_str(path))
-        .await
-        .map_err(|_| anyhow!("fetch failed"))?
-        .unchecked_into::<Response>();
-    let array_buffer = JsFuture::from(
-        response
-            .array_buffer()
-            .map_err(|_| anyhow!("array_buffer failed"))?,
-    )
-    .await
-    .map_err(|_| anyhow!("array_buffer future failed"))?
-    .unchecked_into::<ArrayBuffer>();
-    Ok(Uint8Array::new(&array_buffer).to_vec())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn run_event_loop(
-    event_loop: EventLoop<()>,
-    event_handler: impl FnMut(Event<'_, ()>, &EventLoopWindowTarget<()>, &mut ControlFlow) + 'static,
-) {
-    use wasm_bindgen::prelude::*;
-
-    #[wasm_bindgen]
-    extern "C" {
-        #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
-        fn call_catch(this: &JsValue) -> Result<(), JsValue>;
-    }
-
-    let _ = call_catch(&Closure::once_into_js(move || {
-        event_loop.run(event_handler)
-    }));
-}

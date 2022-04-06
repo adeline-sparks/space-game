@@ -16,7 +16,8 @@ use wgpu::{
     TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState,
 };
 
-use crate::{load_res, Camera};
+use crate::{Camera};
+use crate::plat::load_res;
 
 pub struct GalaxyBox {
     bindgroup: BindGroup,
