@@ -1,6 +1,7 @@
 use std::{fs::File, io::Read};
 
-use winit::{event_loop::{EventLoop, EventLoopWindowTarget, ControlFlow}, window::WindowBuilder, dpi::PhysicalSize, event::Event};
+use log::error;
+use winit::{event_loop::{EventLoop}, window::WindowBuilder, dpi::PhysicalSize};
 
 pub fn do_main() -> anyhow::Result<()> {
     env_logger::init();
@@ -10,18 +11,16 @@ pub fn do_main() -> anyhow::Result<()> {
         .with_inner_size(PhysicalSize::new(1024 * 2, 768 * 2))
         .build(&event_loop)
         .unwrap();
-    pollster::block_on(crate::run(event_loop, window))
+    let mut cb = pollster::block_on(crate::run(window))?;
+    event_loop.run(move |event, _, control_flow| {
+        if let Err(err) = cb(&event, control_flow) {
+            error!("{err:?}");
+        }
+    });
 }
 
 pub async fn load_res(path: &str) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     File::open(path)?.read_to_end(&mut buf)?;
     Ok(buf)
-}
-
-pub fn run_event_loop(
-    event_loop: EventLoop<()>,
-    event_handler: impl FnMut(Event<'_, ()>, &EventLoopWindowTarget<()>, &mut ControlFlow) + 'static,
-) {
-    event_loop.run(event_handler);
 }

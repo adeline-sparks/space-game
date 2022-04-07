@@ -1,3 +1,7 @@
+use winit::{event::Event, event_loop::ControlFlow};
+
+pub type EventHandler = Box<dyn FnMut(&Event<()>, &mut ControlFlow) -> anyhow::Result<()>>;
+
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]

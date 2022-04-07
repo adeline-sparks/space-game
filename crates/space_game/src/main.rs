@@ -7,6 +7,7 @@ use bytemuck::{cast_slice, Pod, Zeroable};
 use log::{info, warn};
 use nalgebra::{Isometry3, Matrix4, Perspective3, UnitQuaternion, Vector2, Vector3};
 use once_cell::sync::Lazy;
+use plat::EventHandler;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -14,7 +15,7 @@ use wgpu::{
 };
 
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{ControlFlow};
 use winit::window::{Window};
 
 mod galaxy;
@@ -35,7 +36,7 @@ struct Camera {
     far: f32,
 }
 
-pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()> {
+pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
 
     let camera_buffer = device.create_buffer(&BufferDescriptor {
@@ -63,7 +64,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
 
     let mut grabbed = false;
     info!("Initialized");
-    plat::run_event_loop(event_loop, move |event, _, control_flow| {
+    Ok(Box::new(move |event, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match &event {
@@ -71,7 +72,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
 
             Event::MainEventsCleared => {
                 window.request_redraw();
-                return;
+                return Ok(());
             }
 
             Event::WindowEvent {
@@ -79,7 +80,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 ..
             } => {
                 *control_flow = ControlFlow::Exit;
-                return;
+                return Ok(());
             }
 
             Event::WindowEvent {
@@ -106,7 +107,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                     }
                 }
 
-                return;
+                return Ok(());
             }
 
             Event::WindowEvent {
@@ -120,7 +121,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 if !grabbed {
                     if let Err(err) = window.set_cursor_grab(true) {
                         warn!("error grabbing cursor: {err}");
-                        return;
+                        return Ok(());
                     }
 
                     grabbed = true;
@@ -132,17 +133,17 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
                 ..
             } => {
                 if !grabbed {
-                    return;
+                    return Ok(());
                 }
 
                 view.append_rotation_mut(&UnitQuaternion::from_scaled_axis(
                     Vector3::new(delta.1, delta.0, 0.0) / 1000.0,
                 ));
-                return;
+                return Ok(());
             }
 
             _ => {
-                return;
+                return Ok(());
             }
         }
 
@@ -166,9 +167,8 @@ pub async fn run(event_loop: EventLoop<()>, window: Window) -> anyhow::Result<()
 
         queue.submit([encoder.finish()]);
         surface_texture.present();
-    });
-
-    Ok(())
+        Ok(())
+    }))
 }
 
 async fn init_wgpu(
