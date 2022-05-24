@@ -5,7 +5,7 @@ use std::num::{NonZeroU32, NonZeroU64};
 use bytemuck::cast_slice;
 use half::f16;
 use image::codecs::hdr::HdrDecoder;
-use wgpu::util::DeviceExt;
+use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use wgpu::{
     include_wgsl, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, Buffer, BufferBinding, BufferBindingType, Color, ColorTargetState,
@@ -13,7 +13,7 @@ use wgpu::{
     PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
     ShaderStages, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState,
+    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState, BufferUsages,
 };
 
 use crate::{Camera};
@@ -22,6 +22,7 @@ use crate::plat::load_res;
 pub struct GalaxyBox {
     bindgroup: BindGroup,
     pipeline: RenderPipeline,
+    quad_buffer: Buffer,
 }
 
 impl GalaxyBox {
@@ -181,13 +182,20 @@ impl GalaxyBox {
             multiview: None,
         });
 
+        let quad_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: cast_slice::<u16, _>(&[0, 1, 2, 2, 3, 0]),
+            usage: BufferUsages::INDEX,
+        });
+
         Ok(GalaxyBox {
             pipeline,
             bindgroup,
+            quad_buffer,
         })
     }
 
-    pub fn draw(&self, encoder: &mut CommandEncoder, quad_buffer: &Buffer, target: &TextureView) {
+    pub fn draw(&self, encoder: &mut CommandEncoder, target: &TextureView) {
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: None,
             color_attachments: &[RenderPassColorAttachment {
@@ -207,8 +215,7 @@ impl GalaxyBox {
         });
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bindgroup, &[]);
-        render_pass.set_index_buffer(quad_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_index_buffer(self.quad_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..6, 0, 0..1);
-        drop(render_pass);
     }
 }

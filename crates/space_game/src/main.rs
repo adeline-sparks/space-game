@@ -8,7 +8,6 @@ use log::{info, warn};
 use nalgebra::{Isometry3, Matrix4, Perspective3, UnitQuaternion, Vector2, Vector3};
 use once_cell::sync::Lazy;
 use plat::EventHandler;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Features, Instance, Limits,
     PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
@@ -20,6 +19,7 @@ use winit::window::{Window};
 
 mod galaxy;
 mod plat;
+mod tonemap;
 
 fn main() -> anyhow::Result<()> {
     plat::do_main()
@@ -44,12 +44,6 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
         size: size_of::<Camera>() as u64,
         usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
         mapped_at_creation: false,
-    });
-
-    let quad_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        contents: cast_slice::<u16, _>(&[0, 1, 2, 2, 3, 0]),
-        usage: BufferUsages::INDEX,
     });
 
     let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, surface_config.format).await?;
@@ -163,7 +157,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
             .create_view(&TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        galaxy_box.draw(&mut encoder, &quad_buffer, &surface_view);
+        galaxy_box.draw(&mut encoder, &surface_view);
 
         queue.submit([encoder.finish()]);
         surface_texture.present();
@@ -203,7 +197,10 @@ async fn init_wgpu(
 }
 
 static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
-    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 1.0,
+    1.0, 0.0, 0.0, 0.0, 
+    0.0, 1.0, 0.0, 0.0, 
+    0.0, 0.0, 0.5, 0.0, 
+    0.0, 0.0, 0.5, 1.0,
 );
 
 static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> =
