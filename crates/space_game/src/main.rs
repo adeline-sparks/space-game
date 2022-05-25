@@ -124,6 +124,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
             } => {
                 if grabbed {
                     grabbed = false;
+                    window.set_cursor_visible(true);
                     if let Err(err) = window.set_cursor_grab(false) {
                         warn!("error releasing cursor: {err}");
                     }
@@ -146,6 +147,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
                         return Ok(());
                     }
 
+                    window.set_cursor_visible(false);
                     grabbed = true;
                 }
             }
