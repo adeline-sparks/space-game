@@ -1,5 +1,6 @@
 use std::mem::size_of;
 
+use std::num::NonZeroU32;
 use std::slice;
 
 use anyhow::anyhow;
@@ -10,7 +11,7 @@ use once_cell::sync::Lazy;
 use plat::EventHandler;
 use wgpu::{
     Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Features, Instance, Limits,
-    PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
+    PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor, TextureDescriptor, Extent3d, TextureFormat, TextureViewDimension, TextureAspect,
 };
 
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -26,6 +27,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 use galaxy::GalaxyBox;
+use tonemap::Tonemap;
 
 #[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
 #[repr(C)]
@@ -46,7 +48,33 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
         mapped_at_creation: false,
     });
 
-    let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, surface_config.format).await?;
+    let hdr_format = TextureFormat::Rgba16Float;
+    let hdr_tex = device.create_texture(&TextureDescriptor { 
+        label: None, 
+        size: Extent3d {
+            width: surface_config.width, 
+            height: surface_config.height, 
+            depth_or_array_layers: 1,
+        }, 
+        mip_level_count: 1, 
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2, 
+        format: hdr_format,
+        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+    });
+    let hdr_target_view = hdr_tex.create_view(&TextureViewDescriptor {
+        label: None,
+        format: Some(hdr_format),
+        dimension: Some(TextureViewDimension::D2),
+        aspect: TextureAspect::default(),
+        base_mip_level: 0,
+        mip_level_count: None,
+        base_array_layer: 0,
+        array_layer_count: NonZeroU32::new(1),
+    });
+
+    let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, hdr_format).await?;
+    let tonemap = Tonemap::new(&device, &hdr_tex, hdr_format, surface_config.format)?;
 
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
@@ -157,7 +185,8 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
             .create_view(&TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        galaxy_box.draw(&mut encoder, &surface_view);
+        galaxy_box.draw(&mut encoder, &hdr_target_view);
+        tonemap.draw(&mut encoder, &surface_view);
 
         queue.submit([encoder.finish()]);
         surface_texture.present();

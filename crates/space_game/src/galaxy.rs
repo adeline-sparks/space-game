@@ -13,7 +13,7 @@ use wgpu::{
     PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
     ShaderStages, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState, BufferUsages,
+    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState, BufferUsages, TextureViewDescriptor, SamplerDescriptor,
 };
 
 use crate::{Camera};
@@ -73,18 +73,18 @@ impl GalaxyBox {
         );
         drop(starmap_samples);
 
-        let starmap_view = starmap_tex.create_view(&wgpu::TextureViewDescriptor {
+        let starmap_view = starmap_tex.create_view(&TextureViewDescriptor {
             label: None,
             format: Some(TextureFormat::Rgba16Float),
             dimension: Some(TextureViewDimension::Cube),
-            aspect: TextureAspect::All,
+            aspect: TextureAspect::default(),
             base_mip_level: 0,
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: NonZeroU32::new(6),
         });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = device.create_sampler(&SamplerDescriptor {
             label: None,
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -130,6 +130,7 @@ impl GalaxyBox {
                 },
             ],
         });
+
         let bindgroup = device.create_bind_group(&BindGroupDescriptor {
             label: None,
             layout: &bindgroup_layout,
@@ -153,7 +154,7 @@ impl GalaxyBox {
             ],
         });
 
-        let module = device.create_shader_module(&include_wgsl!("main.wgsl"));
+        let module = device.create_shader_module(&include_wgsl!("galaxy.wgsl"));
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[&bindgroup_layout],
