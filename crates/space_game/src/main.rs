@@ -78,7 +78,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
 
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
-        surface_config.height as f64 / surface_config.width as f64,
+        surface_config.width as f64 / surface_config.height as f64,
         (60.0f64).to_radians(),
         1.0,
         10.0,
