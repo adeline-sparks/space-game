@@ -5,19 +5,20 @@ use std::num::{NonZeroU32, NonZeroU64};
 use bytemuck::cast_slice;
 use half::f16;
 use image::codecs::hdr::HdrDecoder;
-use wgpu::util::{DeviceExt, BufferInitDescriptor};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     include_wgsl, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, Buffer, BufferBinding, BufferBindingType, Color, ColorTargetState,
-    CommandEncoder, Device, Extent3d, FragmentState, LoadOp, MultisampleState, Operations,
-    PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment,
+    BindGroupLayoutEntry, Buffer, BufferBinding, BufferBindingType, BufferUsages, Color,
+    ColorTargetState, CommandEncoder, Device, Extent3d, FragmentState, LoadOp, MultisampleState,
+    Operations, PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
-    ShaderStages, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDimension, VertexState, BufferUsages, TextureViewDescriptor, SamplerDescriptor,
+    SamplerDescriptor, ShaderStages, TextureAspect, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension, VertexState,
 };
 
-use crate::{Camera};
 use crate::plat::load_res;
+use crate::Camera;
 
 pub struct GalaxyBox {
     bindgroup: BindGroup,

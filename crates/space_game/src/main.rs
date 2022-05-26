@@ -10,13 +10,14 @@ use nalgebra::{Isometry3, Matrix4, Perspective3, UnitQuaternion, Vector2, Vector
 use once_cell::sync::Lazy;
 use plat::EventHandler;
 use wgpu::{
-    Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Features, Instance, Limits,
-    PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor, TextureDescriptor, Extent3d, TextureFormat, TextureViewDimension, TextureAspect,
+    Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Extent3d, Features,
+    Instance, Limits, PresentMode, Queue, Surface, SurfaceConfiguration, TextureAspect,
+    TextureDescriptor, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow};
-use winit::window::{Window};
+use winit::event_loop::ControlFlow;
+use winit::window::Window;
 
 mod plat;
 mod render;
@@ -48,16 +49,16 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
 
     let hdr_format = TextureFormat::Rgba16Float;
     let hdr_tex_size = Vector2::new(surface_config.width, surface_config.height);
-    let hdr_tex = device.create_texture(&TextureDescriptor { 
-        label: None, 
+    let hdr_tex = device.create_texture(&TextureDescriptor {
+        label: None,
         size: Extent3d {
-            width: hdr_tex_size.x, 
-            height: hdr_tex_size.y, 
+            width: hdr_tex_size.x,
+            height: hdr_tex_size.y,
             depth_or_array_layers: 1,
-        }, 
-        mip_level_count: 1, 
+        },
+        mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2, 
+        dimension: wgpu::TextureDimension::D2,
         format: hdr_format,
         usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
     });
@@ -73,7 +74,13 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     });
 
     let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, hdr_format).await?;
-    let tonemap = Tonemap::new(&device, &hdr_tex, hdr_tex_size, hdr_format, surface_config.format)?;
+    let tonemap = Tonemap::new(
+        &device,
+        &hdr_tex,
+        hdr_tex_size,
+        hdr_format,
+        surface_config.format,
+    )?;
 
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
@@ -226,6 +233,7 @@ async fn init_wgpu(
     Ok((device, queue, surface, surface_config))
 }
 
+#[rustfmt::skip]
 static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0, 
     0.0, 1.0, 0.0, 0.0, 

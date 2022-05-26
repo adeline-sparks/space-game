@@ -1,13 +1,15 @@
+use anyhow::anyhow;
 use js_sys::{ArrayBuffer, Uint8Array};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use wasm_bindgen::prelude::*;
 use web_sys::Response;
-use anyhow::anyhow;
 
 use log::error;
+use winit::dpi::PhysicalSize;
+use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
-use winit::{event_loop::{EventLoop}, window::WindowBuilder, dpi::PhysicalSize};
+use winit::window::WindowBuilder;
 
 pub fn do_main() -> anyhow::Result<()> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));

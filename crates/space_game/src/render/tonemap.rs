@@ -1,8 +1,17 @@
-use std::{num::NonZeroU32};
+use std::num::NonZeroU32;
 
 use bytemuck::cast_slice;
 use nalgebra::Vector2;
-use wgpu::{BindGroup, RenderPipeline, Buffer, Device, TextureView, SamplerDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, PipelineLayoutDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, RenderPipelineDescriptor, include_wgsl, util::{DeviceExt, BufferInitDescriptor}, BufferUsages, TextureFormat, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, Operations, Color, LoadOp, TextureViewDescriptor, TextureAspect, Texture, TextureViewDimension, BindingType, BufferBindingType, BufferBinding};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{
+    include_wgsl, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingType, Buffer, BufferBinding, BufferBindingType, BufferUsages,
+    Color, ColorTargetState, CommandEncoder, Device, FragmentState, LoadOp, MultisampleState,
+    Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
+    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
+    SamplerDescriptor, ShaderStages, Texture, TextureAspect, TextureFormat, TextureSampleType,
+    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
+};
 
 use crate::render::Histogram;
 
@@ -32,25 +41,17 @@ impl Tonemap {
             array_layer_count: NonZeroU32::new(1),
         });
 
-        let histogram = Histogram::new(
-            device,
-            &hdr_view,
-            hdr_tex_size,
-        );
+        let histogram = Histogram::new(device, &hdr_view, hdr_tex_size);
 
-        let (render_bindgroup, render_pipeline, render_indices) = Self::make_render_pipeline(
-            device,
-            &hdr_view,
-            histogram.buffer(),
-            target_format,
-        );
+        let (render_bindgroup, render_pipeline, render_indices) =
+            Self::make_render_pipeline(device, &hdr_view, histogram.buffer(), target_format);
 
-        Ok(Tonemap { 
+        Ok(Tonemap {
             histogram,
-            bindgroup: render_bindgroup, 
-            pipeline: render_pipeline, 
-            indices: render_indices
-         })
+            bindgroup: render_bindgroup,
+            pipeline: render_pipeline,
+            indices: render_indices,
+        })
     }
 
     fn make_render_pipeline(
@@ -96,15 +97,13 @@ impl Tonemap {
                 BindGroupLayoutEntry {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer { 
-                        ty: BufferBindingType::Storage { 
-                            read_only: true, 
-                        }, 
-                        has_dynamic_offset: false, 
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
-                }
+                },
             ],
         });
 
@@ -127,7 +126,7 @@ impl Tonemap {
                         offset: 0,
                         size: None,
                     }),
-                }
+                },
             ],
         });
 

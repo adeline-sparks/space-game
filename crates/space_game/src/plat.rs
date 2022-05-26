@@ -1,4 +1,5 @@
-use winit::{event::Event, event_loop::ControlFlow};
+use winit::event::Event;
+use winit::event_loop::ControlFlow;
 
 pub type EventHandler = Box<dyn FnMut(&Event<()>, &mut ControlFlow) -> anyhow::Result<()>>;
 

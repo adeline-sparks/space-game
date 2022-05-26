@@ -1,7 +1,10 @@
-use std::{fs::File, io::Read};
+use std::fs::File;
+use std::io::Read;
 
 use log::error;
-use winit::{event_loop::{EventLoop}, window::WindowBuilder, dpi::PhysicalSize};
+use winit::dpi::PhysicalSize;
+use winit::event_loop::EventLoop;
+use winit::window::WindowBuilder;
 
 pub fn do_main() -> anyhow::Result<()> {
     env_logger::init();
