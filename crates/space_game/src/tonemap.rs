@@ -259,7 +259,7 @@ impl Tonemap {
         });
         compute_pass.set_pipeline(&self.histogram_pipeline);
         compute_pass.set_bind_group(0, &self.histogram_bindgroup, &[]);
-        compute_pass.dispatch(self.histogram_dispatches.x, self.histogram_dispatches.y, 1);
+        compute_pass.dispatch_workgroups(self.histogram_dispatches.x, self.histogram_dispatches.y, 1);
         drop(compute_pass);
 
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {

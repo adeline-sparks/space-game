@@ -1,12 +1,8 @@
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var hdr_tex: texture_2d<f32>;
 
-struct Buffer {
-    buckets: array<atomic<u32>, 256>;
-};
-
-[[group(0), binding(1)]]
-var<storage, read_write> histogram_buffer: Buffer;
+@group(0) @binding(1)
+var<storage, read_write> histogram_buffer: array<atomic<u32>, 256>;
 
 var<workgroup> workgroup_buckets: array<atomic<u32>, 256>;
 
@@ -28,10 +24,10 @@ fn luminance_to_bucket(lum: f32) -> u32 {
     return u32(floor(clamp(bucket + 1.0, 1.0, 256.0)));
 }
 
-[[stage(compute), workgroup_size(16, 16)]]
+@compute @workgroup_size(16, 16)
 fn main(
-    [[builtin(global_invocation_id)]] global_id: vec3<u32>,
-    [[builtin(local_invocation_index)]] local_index: u32,
+    @builtin(global_invocation_id) global_id: vec3<u32>,
+    @builtin(local_invocation_index) local_index: u32,
 ) {
     let dim = textureDimensions(hdr_tex);
     let pos = vec2<i32>(global_id.xy);
@@ -43,5 +39,5 @@ fn main(
     }
 
     workgroupBarrier();
-    atomicAdd(&histogram_buffer.buckets[local_index], atomicLoad(&workgroup_buckets[local_index]));
+    atomicAdd(&histogram_buffer[local_index], atomicLoad(&workgroup_buckets[local_index]));
 }

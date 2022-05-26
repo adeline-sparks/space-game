@@ -1,23 +1,20 @@
 struct Camera {
-    inv_view_projection: mat4x4<f32>;
-    viewport: vec2<f32>;
-    near: f32;
-    far: f32;
+    inv_view_projection: mat4x4<f32>,
+    viewport: vec2<f32>,
+    near: f32,
+    far: f32,
 };
 
-var<private> tau: f32 = 6.28318530717958647692528676655900577;
-var<private> pi: f32 = 3.14159265358979323846264338327950288;
-
-[[group(0), binding(0)]]
+@group(0) @binding(0)
 var starmap_tex: texture_cube<f32>;
-[[group(0), binding(1)]]
+@group(0) @binding(1)
 var starmap_sampler: sampler;
-[[group(0), binding(2)]]
+@group(0) @binding(2)
 var<uniform> camera: Camera;
 
 struct Vertex {
-    [[builtin(position)]] position: vec4<f32>;
-    [[location(0)]] world_ray: vec3<f32>;
+    @builtin(position) position: vec4<f32>,
+    @location(0) world_ray: vec3<f32>,
 };
 
 var<private> fullscreen_quad: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
@@ -35,9 +32,9 @@ fn inv_project(
     return proj.xyz / proj.w;
 }
 
-[[stage(vertex)]]
+@vertex
 fn vert_main(
-    [[builtin(vertex_index)]] index: u32,
+    @builtin(vertex_index) index: u32,
 ) -> Vertex {
     var vert: Vertex;
 
@@ -56,9 +53,9 @@ fn vert_main(
     return vert;
 }
 
-[[stage(fragment)]]
+@fragment
 fn frag_main(
     vert: Vertex,
-) -> [[location(0)]] vec4<f32> {
+) -> @location(0) vec4<f32> {
     return textureSample(starmap_tex, starmap_sampler, vert.world_ray);
 }
