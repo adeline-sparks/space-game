@@ -18,6 +18,7 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCo
 use winit::event_loop::{ControlFlow};
 use winit::window::{Window};
 
+mod histogram;
 mod galaxy;
 mod plat;
 mod tonemap;
