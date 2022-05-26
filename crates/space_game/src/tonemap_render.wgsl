@@ -41,7 +41,7 @@ fn frag_main(
     let bucket = u32(vert.position.x);
     let ypos = 1.0 - vert.position.y / 200.0;
     if (bucket < 256u && ypos >= 0.0) {
-        if (ypos < f32(histogram_buffer[bucket]) / 2e4) {
+        if (ypos < f32(histogram_buffer[bucket]) / 5e4) {
             return vec4<f32>(1.0, 0.0, 0.0, 1.0);
         } else {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);

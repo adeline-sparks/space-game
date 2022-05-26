@@ -11,9 +11,9 @@ fn rgb_to_luminance(rgb: vec3<f32>) -> f32 {
 }
 
 fn luminance_to_bucket(lum: f32) -> u32 {
-    let min_lum = 0.01;
+    let min_lum = 0.001;
     let log_min_lum = log2(min_lum);
-    let max_lum = 50.0;
+    let max_lum = 1000.0;
     let log_max_lum = log2(max_lum);
 
     if (lum < min_lum) {
@@ -29,7 +29,7 @@ fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
     @builtin(local_invocation_index) local_index: u32,
 ) {
-    atomicStore(&workgroup_buckets[local_index], 0u);
+    workgroup_buckets[local_index] = 0u;
     workgroupBarrier();
 
     let dim = textureDimensions(hdr_tex);
@@ -42,5 +42,5 @@ fn main(
     }
 
     workgroupBarrier();
-    atomicAdd(&histogram_buffer[local_index], atomicLoad(&workgroup_buckets[local_index]));
+    atomicAdd(&histogram_buffer[local_index], workgroup_buckets[local_index]);
 }
