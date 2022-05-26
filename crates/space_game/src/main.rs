@@ -210,7 +210,7 @@ async fn init_wgpu(
     let device_desc = DeviceDescriptor {
         label: None,
         features: Features::empty(),
-        limits: Limits::downlevel_webgl2_defaults(),
+        limits: Limits::downlevel_defaults(),
     };
     let (device, queue) = adapter.request_device(&device_desc, None).await?;
 

@@ -1,7 +1,7 @@
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32};
 
 use bytemuck::cast_slice;
-use wgpu::{BindGroup, RenderPipeline, Buffer, Device, TextureView, SamplerDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, PipelineLayoutDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, RenderPipelineDescriptor, include_wgsl, util::{DeviceExt, BufferInitDescriptor}, BufferUsages, TextureFormat, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, Operations, Color, LoadOp, TextureViewDescriptor, TextureAspect, Texture, TextureViewDimension};
+use wgpu::{BindGroup, RenderPipeline, Buffer, Device, TextureView, SamplerDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, PipelineLayoutDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, RenderPipelineDescriptor, include_wgsl, util::{DeviceExt, BufferInitDescriptor}, BufferUsages, TextureFormat, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, Operations, Color, LoadOp, TextureViewDescriptor, TextureAspect, Texture, TextureViewDimension, BufferDescriptor, BindingType, BufferBindingType, BufferBinding};
 
 pub struct Tonemap {
     bindgroup: BindGroup,
@@ -16,6 +16,16 @@ impl Tonemap {
         hdr_format: TextureFormat,
         target_format: TextureFormat,
     ) -> anyhow::Result<Tonemap> {
+        let histogram_buffer_init = (0..256usize)
+            .into_iter()
+            .map(|i| (i * 128) as u32)
+            .collect::<Vec<_>>();
+        let histogram_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: cast_slice(histogram_buffer_init.as_slice()),
+            usage: BufferUsages::STORAGE,
+        });
+
         let hdr_view = hdr_tex.create_view(&TextureViewDescriptor {
             label: None,
             format: Some(hdr_format),
@@ -47,9 +57,9 @@ impl Tonemap {
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
+                    ty: BindingType::Texture {
                         sample_type: TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: TextureViewDimension::D2,
                         multisampled: false,
                     },
                     count: None,
@@ -57,9 +67,21 @@ impl Tonemap {
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer { 
+                        ty: BufferBindingType::Storage { 
+                            read_only: true, 
+                        }, 
+                        has_dynamic_offset: false, 
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
             ],
         });
 
@@ -75,6 +97,14 @@ impl Tonemap {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&hdr_sampler),
                 },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(BufferBinding {
+                        buffer: &histogram_buffer,
+                        offset: 0,
+                        size: None,
+                    }),
+                }
             ],
         });
 
