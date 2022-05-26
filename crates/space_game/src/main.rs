@@ -18,17 +18,14 @@ use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCo
 use winit::event_loop::{ControlFlow};
 use winit::window::{Window};
 
-mod histogram;
-mod galaxy;
 mod plat;
-mod tonemap;
+mod render;
 
 fn main() -> anyhow::Result<()> {
     plat::do_main()
 }
 
-use galaxy::GalaxyBox;
-use tonemap::Tonemap;
+use render::{GalaxyBox, Tonemap};
 
 #[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
 #[repr(C)]

@@ -71,7 +71,7 @@ impl Histogram {
             ],
         });
 
-        let module = device.create_shader_module(&include_wgsl!("tonemap_histogram.wgsl"));
+        let module = device.create_shader_module(&include_wgsl!("histogram.wgsl"));
         
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,

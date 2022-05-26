@@ -4,7 +4,7 @@ use bytemuck::cast_slice;
 use nalgebra::Vector2;
 use wgpu::{BindGroup, RenderPipeline, Buffer, Device, TextureView, SamplerDescriptor, BindGroupLayoutEntry, ShaderStages, TextureSampleType, SamplerBindingType, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, PipelineLayoutDescriptor, VertexState, PrimitiveState, MultisampleState, FragmentState, ColorTargetState, RenderPipelineDescriptor, include_wgsl, util::{DeviceExt, BufferInitDescriptor}, BufferUsages, TextureFormat, CommandEncoder, RenderPassDescriptor, RenderPassColorAttachment, Operations, Color, LoadOp, TextureViewDescriptor, TextureAspect, Texture, TextureViewDimension, BindingType, BufferBindingType, BufferBinding};
 
-use crate::histogram::Histogram;
+use crate::render::Histogram;
 
 pub struct Tonemap {
     histogram: Histogram,
@@ -131,7 +131,7 @@ impl Tonemap {
             ],
         });
 
-        let module = device.create_shader_module(&include_wgsl!("tonemap_render.wgsl"));
+        let module = device.create_shader_module(&include_wgsl!("tonemap.wgsl"));
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[&bindgroup_layout],
