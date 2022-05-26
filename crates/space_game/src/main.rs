@@ -49,11 +49,12 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     });
 
     let hdr_format = TextureFormat::Rgba16Float;
+    let hdr_tex_size = Vector2::new(surface_config.width, surface_config.height);
     let hdr_tex = device.create_texture(&TextureDescriptor { 
         label: None, 
         size: Extent3d {
-            width: surface_config.width, 
-            height: surface_config.height, 
+            width: hdr_tex_size.x, 
+            height: hdr_tex_size.y, 
             depth_or_array_layers: 1,
         }, 
         mip_level_count: 1, 
@@ -74,7 +75,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     });
 
     let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, hdr_format).await?;
-    let tonemap = Tonemap::new(&device, &hdr_tex, hdr_format, surface_config.format)?;
+    let tonemap = Tonemap::new(&device, &hdr_tex, hdr_tex_size, hdr_format, surface_config.format)?;
 
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
