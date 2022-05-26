@@ -16,11 +16,13 @@ pub struct Histogram {
     dispatch_count: Vector2<u32>,
 }
 
+const NUM_BUCKETS: usize = 256;
+
 impl Histogram {
     pub fn new(device: &Device, hdr_view: &TextureView, hdr_tex_size: Vector2<u32>) -> Histogram {
         let buffer = device.create_buffer(&BufferDescriptor {
             label: None,
-            size: size_of::<[u32; 256]>() as u64,
+            size: (size_of::<u32>() * NUM_BUCKETS) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });

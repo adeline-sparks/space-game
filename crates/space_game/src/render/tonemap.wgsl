@@ -1,10 +1,12 @@
+let NUM_BUCKETS = 256u;
+
 @group(0) @binding(0)
 var hdr_tex: texture_2d<f32>;
 @group(0) @binding(1)
 var hdr_sampler: sampler;
 
 @group(0) @binding(2)
-var<storage> histogram_buffer: array<u32, 256>;
+var<storage> histogram_buffer: array<u32, NUM_BUCKETS>;
 
 var<private> fullscreen_quad: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
     vec2<f32>(1.0, 1.0),
@@ -40,7 +42,7 @@ fn frag_main(
 
     let bucket = u32(vert.position.x);
     let ypos = 1.0 - vert.position.y / 200.0;
-    if (bucket < 256u && ypos >= 0.0) {
+    if (bucket < NUM_BUCKETS && ypos >= 0.0) {
         if (ypos < f32(histogram_buffer[bucket]) / 5e4) {
             return vec4<f32>(1.0, 0.0, 0.0, 1.0);
         } else {
