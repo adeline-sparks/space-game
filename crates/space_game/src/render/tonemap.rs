@@ -6,8 +6,8 @@ use wgpu::{
     Color, ColorTargetState, CommandEncoder, Device, FragmentState, LoadOp, MultisampleState,
     Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
-    SamplerDescriptor, ShaderStages, TextureFormat, TextureSampleType,
-    TextureView, TextureViewDimension, VertexState,
+    SamplerDescriptor, ShaderStages, TextureFormat, TextureSampleType, TextureView,
+    TextureViewDimension, VertexState,
 };
 
 pub struct Tonemap {

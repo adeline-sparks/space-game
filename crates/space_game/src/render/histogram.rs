@@ -101,7 +101,7 @@ impl Histogram {
 
     pub fn dispatch(&self, encoder: &mut CommandEncoder) {
         encoder.clear_buffer(&self.buffer, 0, None);
-        
+
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bindgroup, &[]);

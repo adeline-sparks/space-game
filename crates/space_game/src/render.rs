@@ -1,21 +1,30 @@
 mod galaxy;
-use std::{mem::size_of, num::NonZeroU32};
+use std::mem::size_of;
+use std::num::NonZeroU32;
+use std::slice;
 
+use bytemuck::cast_slice;
 pub use galaxy::*;
 
 mod histogram;
 pub use histogram::*;
 
 mod tonemap;
-use nalgebra::Vector2;
+use nalgebra::{Isometry3, Matrix4, Perspective3, Vector2};
+use once_cell::sync::Lazy;
 pub use tonemap::*;
-use wgpu::{Device, Queue, TextureFormat, BufferDescriptor, BufferUsages, SurfaceConfiguration, TextureDescriptor, Extent3d, TextureUsages, TextureViewDescriptor, TextureViewDimension, TextureAspect, Buffer, Texture, TextureView, CommandEncoder};
+use wgpu::{
+    Buffer, BufferDescriptor, BufferUsages, Device, Extent3d, Queue, TextureAspect,
+    TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension,
+};
 
 use crate::Camera;
 
 pub struct Renderer {
-    pub camera_buffer: Buffer, // TODO
+    camera_buffer: Buffer,
     hdr_view: TextureView,
+    target_size: Vector2<u32>,
     galaxy: GalaxyBox,
     histogram: Histogram,
     tonemap: Tonemap,
@@ -25,16 +34,16 @@ impl Renderer {
     pub async fn new(
         device: &Device,
         queue: &Queue,
-        surface_config: &SurfaceConfiguration,
+        target_size: Vector2<u32>,
+        target_format: TextureFormat,
     ) -> anyhow::Result<Self> {
         let hdr_format = TextureFormat::Rgba16Float;
-        let hdr_tex_size = Vector2::new(surface_config.width, surface_config.height);
 
         let hdr_tex = device.create_texture(&TextureDescriptor {
             label: None,
             size: Extent3d {
-                width: hdr_tex_size.x,
-                height: hdr_tex_size.y,
+                width: target_size.x,
+                height: target_size.y,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -62,32 +71,60 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        let galaxy = GalaxyBox::new(
-            device,
-            queue,
-            &camera_buffer,
-            hdr_format,
-        ).await?;
+        let galaxy = GalaxyBox::new(device, queue, &camera_buffer, hdr_format).await?;
 
-        let histogram = Histogram::new(
-            device,
-            &hdr_view,
-            hdr_tex_size,
-        );
+        let histogram = Histogram::new(device, &hdr_view, target_size);
 
-        let tonemap = Tonemap::new(
-            device,
-            &hdr_view,
-            histogram.buffer(),
-            surface_config.format,
-        );
-        
-        Ok(Renderer { camera_buffer, hdr_view, galaxy, histogram, tonemap })
+        let tonemap = Tonemap::new(device, &hdr_view, histogram.buffer(), target_format);
+
+        Ok(Renderer {
+            camera_buffer,
+            hdr_view,
+            target_size,
+            galaxy,
+            histogram,
+            tonemap,
+        })
     }
 
-    pub fn draw(&self, encoder: &mut CommandEncoder, target: &TextureView) {
-        self.galaxy.draw(encoder, &self.hdr_view);
-        self.histogram.dispatch(encoder);
-        self.tonemap.draw(encoder, target);
+    pub fn draw(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        target: &TextureView,
+        view: &Isometry3<f64>,
+    ) {
+        let projection = Perspective3::new(
+            self.target_size.x as f64 / self.target_size.y as f64,
+            (60.0f64).to_radians(),
+            1.0,
+            10.0,
+        );
+        let camera = Camera {
+            viewport: Vector2::new(self.target_size.x as f32, self.target_size.y as f32),
+            near: projection.znear() as f32,
+            far: projection.zfar() as f32,
+            inv_view_projection: {
+                (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast()
+            },
+        };
+        queue.write_buffer(&self.camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        self.galaxy.draw(&mut encoder, &self.hdr_view);
+        self.histogram.dispatch(&mut encoder);
+        self.tonemap.draw(&mut encoder, target);
+        queue.submit([encoder.finish()]);
     }
 }
+
+#[rustfmt::skip]
+static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
+    1.0, 0.0, 0.0, 0.0, 
+    0.0, 1.0, 0.0, 0.0, 
+    0.0, 0.0, 0.5, 0.0, 
+    0.0, 0.0, 0.5, 1.0,
+);
+
+static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> =
+    Lazy::new(|| OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap());

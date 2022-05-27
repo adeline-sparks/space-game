@@ -1,14 +1,11 @@
-use std::slice;
-
 use anyhow::anyhow;
-use bytemuck::{cast_slice, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable};
 use log::{info, warn};
-use nalgebra::{Isometry3, Matrix4, Perspective3, UnitQuaternion, Vector2, Vector3};
-use once_cell::sync::Lazy;
+use nalgebra::{Isometry3, Matrix4, UnitQuaternion, Vector2, Vector3};
 use plat::EventHandler;
 use wgpu::{
-    Backends, Device, DeviceDescriptor, Features,
-    Instance, Limits, PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
+    Backends, Device, DeviceDescriptor, Features, Instance, Limits, PresentMode, Queue, Surface,
+    SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
 };
 
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -35,15 +32,15 @@ struct Camera {
 
 pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
-    let renderer = Renderer::new(&device, &queue, &surface_config).await?;
+    let renderer = Renderer::new(
+        &device,
+        &queue,
+        Vector2::new(surface_config.width as u32, surface_config.height as u32),
+        surface_config.format,
+    )
+    .await?;
 
     let mut view = Isometry3::<f64>::default();
-    let projection = Perspective3::new(
-        surface_config.width as f64 / surface_config.height as f64,
-        (60.0f64).to_radians(),
-        1.0,
-        10.0,
-    );
 
     let mut grabbed = false;
     info!("Initialized");
@@ -111,6 +108,8 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
                     window.set_cursor_visible(false);
                     grabbed = true;
                 }
+
+                return Ok(());
             }
 
             Event::DeviceEvent {
@@ -132,25 +131,12 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
             }
         }
 
-        let camera = Camera {
-            viewport: Vector2::new(surface_config.width as f32, surface_config.height as f32),
-            near: projection.znear() as f32,
-            far: projection.zfar() as f32,
-            inv_view_projection: {
-                (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast()
-            },
-        };
-        queue.write_buffer(&renderer.camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
-
         let surface_texture = surface.get_current_texture().unwrap();
         let surface_view = surface_texture
             .texture
             .create_view(&TextureViewDescriptor::default());
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        renderer.draw(&mut encoder, &surface_view);
-
-        queue.submit([encoder.finish()]);
+        renderer.draw(&device, &queue, &surface_view, &view);
         surface_texture.present();
         Ok(())
     }))
@@ -186,14 +172,3 @@ async fn init_wgpu(
 
     Ok((device, queue, surface, surface_config))
 }
-
-#[rustfmt::skip]
-static OPENGL_TO_WGPU_MATRIX: Matrix4<f64> = Matrix4::new(
-    1.0, 0.0, 0.0, 0.0, 
-    0.0, 1.0, 0.0, 0.0, 
-    0.0, 0.0, 0.5, 0.0, 
-    0.0, 0.0, 0.5, 1.0,
-);
-
-static WGPU_TO_OPENGL_MATRIX: Lazy<Matrix4<f64>> =
-    Lazy::new(|| OPENGL_TO_WGPU_MATRIX.try_inverse().unwrap());
