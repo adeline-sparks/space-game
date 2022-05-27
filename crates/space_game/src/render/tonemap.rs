@@ -1,7 +1,4 @@
-use std::num::NonZeroU32;
-
 use bytemuck::cast_slice;
-use nalgebra::Vector2;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     include_wgsl, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
@@ -9,14 +6,11 @@ use wgpu::{
     Color, ColorTargetState, CommandEncoder, Device, FragmentState, LoadOp, MultisampleState,
     Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
     RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerBindingType,
-    SamplerDescriptor, ShaderStages, Texture, TextureAspect, TextureFormat, TextureSampleType,
-    TextureView, TextureViewDescriptor, TextureViewDimension, VertexState,
+    SamplerDescriptor, ShaderStages, TextureFormat, TextureSampleType,
+    TextureView, TextureViewDimension, VertexState,
 };
 
-use crate::render::Histogram;
-
 pub struct Tonemap {
-    histogram: Histogram,
     bindgroup: BindGroup,
     pipeline: RenderPipeline,
     indices: Buffer,
@@ -25,41 +19,10 @@ pub struct Tonemap {
 impl Tonemap {
     pub fn new(
         device: &Device,
-        hdr_tex: &Texture,
-        hdr_tex_size: Vector2<u32>,
-        hdr_format: TextureFormat,
-        target_format: TextureFormat,
-    ) -> anyhow::Result<Tonemap> {
-        let hdr_view = hdr_tex.create_view(&TextureViewDescriptor {
-            label: None,
-            format: Some(hdr_format),
-            dimension: Some(TextureViewDimension::D2),
-            aspect: TextureAspect::default(),
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: NonZeroU32::new(1),
-        });
-
-        let histogram = Histogram::new(device, &hdr_view, hdr_tex_size);
-
-        let (render_bindgroup, render_pipeline, render_indices) =
-            Self::make_render_pipeline(device, &hdr_view, histogram.buffer(), target_format);
-
-        Ok(Tonemap {
-            histogram,
-            bindgroup: render_bindgroup,
-            pipeline: render_pipeline,
-            indices: render_indices,
-        })
-    }
-
-    fn make_render_pipeline(
-        device: &Device,
         hdr_view: &TextureView,
         histogram_buffer: &Buffer,
         target_format: TextureFormat,
-    ) -> (BindGroup, RenderPipeline, Buffer) {
+    ) -> Tonemap {
         let hdr_sampler = device.create_sampler(&SamplerDescriptor {
             label: None,
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -165,12 +128,14 @@ impl Tonemap {
             usage: BufferUsages::INDEX,
         });
 
-        (bindgroup, pipeline, indices)
+        Tonemap {
+            bindgroup,
+            pipeline,
+            indices,
+        }
     }
 
     pub fn draw(&self, encoder: &mut CommandEncoder, target: &TextureView) {
-        self.histogram.encode(encoder);
-
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: None,
             color_attachments: &[RenderPassColorAttachment {

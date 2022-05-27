@@ -99,12 +99,12 @@ impl Histogram {
         &self.buffer
     }
 
-    pub fn encode(&self, encoder: &mut CommandEncoder) {
+    pub fn dispatch(&self, encoder: &mut CommandEncoder) {
         encoder.clear_buffer(&self.buffer, 0, None);
+        
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bindgroup, &[]);
         compute_pass.dispatch_workgroups(self.dispatch_count.x, self.dispatch_count.y, 1);
-        drop(compute_pass);
     }
 }

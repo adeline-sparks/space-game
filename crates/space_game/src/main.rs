@@ -1,6 +1,3 @@
-use std::mem::size_of;
-
-use std::num::NonZeroU32;
 use std::slice;
 
 use anyhow::anyhow;
@@ -10,9 +7,8 @@ use nalgebra::{Isometry3, Matrix4, Perspective3, UnitQuaternion, Vector2, Vector
 use once_cell::sync::Lazy;
 use plat::EventHandler;
 use wgpu::{
-    Backends, BufferDescriptor, BufferUsages, Device, DeviceDescriptor, Extent3d, Features,
-    Instance, Limits, PresentMode, Queue, Surface, SurfaceConfiguration, TextureAspect,
-    TextureDescriptor, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    Backends, Device, DeviceDescriptor, Features,
+    Instance, Limits, PresentMode, Queue, Surface, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
 };
 
 use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -26,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     plat::do_main()
 }
 
-use render::{GalaxyBox, Tonemap};
+use crate::render::Renderer;
 
 #[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
 #[repr(C)]
@@ -39,48 +35,7 @@ struct Camera {
 
 pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
-
-    let camera_buffer = device.create_buffer(&BufferDescriptor {
-        label: None,
-        size: size_of::<Camera>() as u64,
-        usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
-        mapped_at_creation: false,
-    });
-
-    let hdr_format = TextureFormat::Rgba16Float;
-    let hdr_tex_size = Vector2::new(surface_config.width, surface_config.height);
-    let hdr_tex = device.create_texture(&TextureDescriptor {
-        label: None,
-        size: Extent3d {
-            width: hdr_tex_size.x,
-            height: hdr_tex_size.y,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: hdr_format,
-        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-    });
-    let hdr_target_view = hdr_tex.create_view(&TextureViewDescriptor {
-        label: None,
-        format: Some(hdr_format),
-        dimension: Some(TextureViewDimension::D2),
-        aspect: TextureAspect::default(),
-        base_mip_level: 0,
-        mip_level_count: None,
-        base_array_layer: 0,
-        array_layer_count: NonZeroU32::new(1),
-    });
-
-    let galaxy_box = GalaxyBox::new(&device, &queue, &camera_buffer, hdr_format).await?;
-    let tonemap = Tonemap::new(
-        &device,
-        &hdr_tex,
-        hdr_tex_size,
-        hdr_format,
-        surface_config.format,
-    )?;
+    let renderer = Renderer::new(&device, &queue, &surface_config).await?;
 
     let mut view = Isometry3::<f64>::default();
     let projection = Perspective3::new(
@@ -185,7 +140,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
                 (view.inverse().to_matrix() * projection.inverse() * *WGPU_TO_OPENGL_MATRIX).cast()
             },
         };
-        queue.write_buffer(&camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
+        queue.write_buffer(&renderer.camera_buffer, 0, cast_slice(slice::from_ref(&camera)));
 
         let surface_texture = surface.get_current_texture().unwrap();
         let surface_view = surface_texture
@@ -193,8 +148,7 @@ pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
             .create_view(&TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        galaxy_box.draw(&mut encoder, &hdr_target_view);
-        tonemap.draw(&mut encoder, &surface_view);
+        renderer.draw(&mut encoder, &surface_view);
 
         queue.submit([encoder.finish()]);
         surface_texture.present();
