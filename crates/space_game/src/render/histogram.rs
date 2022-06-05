@@ -1,29 +1,39 @@
 use std::mem::size_of;
 
+use bytemuck::cast_slice_mut;
 use nalgebra::Vector2;
 use wgpu::{
     include_wgsl, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBinding, BufferBindingType, BufferDescriptor,
     BufferUsages, CommandEncoder, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, Device, PipelineLayoutDescriptor, ShaderStages, TextureSampleType,
-    TextureView, TextureViewDimension,
+    TextureView, TextureViewDimension, MapMode, Maintain,
 };
 
 pub struct Histogram {
     buffer: Buffer,
+    read_buffer: Buffer,
     bindgroup: BindGroup,
     pipeline: ComputePipeline,
     dispatch_count: Vector2<u32>,
 }
 
 const NUM_BUCKETS: usize = 256;
+const BUFFER_SIZE: usize = size_of::<u32>() * NUM_BUCKETS;
 
 impl Histogram {
     pub fn new(device: &Device, hdr_view: &TextureView, hdr_tex_size: Vector2<u32>) -> Histogram {
         let buffer = device.create_buffer(&BufferDescriptor {
             label: None,
-            size: (size_of::<u32>() * NUM_BUCKETS) as u64,
+            size: BUFFER_SIZE as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let read_buffer = device.create_buffer(&BufferDescriptor { 
+            label: None, 
+            size: BUFFER_SIZE as u64, 
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
             mapped_at_creation: false,
         });
 
@@ -89,6 +99,7 @@ impl Histogram {
 
         Histogram {
             buffer,
+            read_buffer,
             bindgroup,
             pipeline,
             dispatch_count: hdr_tex_size / 16,
@@ -106,5 +117,15 @@ impl Histogram {
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bindgroup, &[]);
         compute_pass.dispatch_workgroups(self.dispatch_count.x, self.dispatch_count.y, 1);
+        drop(compute_pass);
+
+        encoder.copy_buffer_to_buffer(&self.buffer, 0, &self.read_buffer, 0, BUFFER_SIZE as u64)
+    }
+
+    pub async fn read(&self, buckets: &mut [u32]) {
+        let slice = self.read_buffer.slice(..);
+        slice.map_async(MapMode::Read).await.unwrap();
+        cast_slice_mut(buckets).copy_from_slice(slice.get_mapped_range().as_ref());
+        self.read_buffer.unmap();
     }
 }

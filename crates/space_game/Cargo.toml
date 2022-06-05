@@ -12,10 +12,10 @@ wgpu = { git = 'https://github.com/gfx-rs/wgpu.git', rev = '9114283707a8b472412c
 
 # Math/Physics
 nalgebra = { version = '0.30', features = ['bytemuck'] }
-bytemuck = { version = '1', features = ['derive'] }
 
 # Utilities
 anyhow = { version = '1', features = ['backtrace'] }
+bytemuck = { version = '1', features = ['derive'] }
 half = { version = '1', features = ['bytemuck'] }
 indexmap = '1'
 log = { version = '0.4', features = ['std'] }
