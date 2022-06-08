@@ -32,7 +32,7 @@ struct Camera {
 
 pub async fn run(window: Window) -> anyhow::Result<EventHandler> {
     let (device, queue, surface, surface_config) = init_wgpu(&window).await?;
-    let renderer = Renderer::new(
+    let mut renderer = Renderer::new(
         &device,
         &queue,
         Vector2::new(surface_config.width as u32, surface_config.height as u32),

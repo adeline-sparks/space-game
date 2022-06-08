@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{mem::size_of, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 
 use bytemuck::cast_slice_mut;
 use nalgebra::Vector2;
@@ -7,7 +7,7 @@ use wgpu::{
     BindGroupLayoutEntry, BindingType, Buffer, BufferBinding, BufferBindingType, BufferDescriptor,
     BufferUsages, CommandEncoder, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, Device, PipelineLayoutDescriptor, ShaderStages, TextureSampleType,
-    TextureView, TextureViewDimension, MapMode, Maintain,
+    TextureView, TextureViewDimension, MapMode,
 };
 
 pub struct Histogram {
@@ -16,6 +16,8 @@ pub struct Histogram {
     bindgroup: BindGroup,
     pipeline: ComputePipeline,
     dispatch_count: Vector2<u32>,
+    read_buffer_mapped: Arc<AtomicBool>,
+    read_buffer_contents: [u32; NUM_BUCKETS],
 }
 
 const NUM_BUCKETS: usize = 256;
@@ -103,6 +105,8 @@ impl Histogram {
             bindgroup,
             pipeline,
             dispatch_count: hdr_tex_size / 16,
+            read_buffer_mapped: Arc::new(AtomicBool::new(false)),
+            read_buffer_contents: [0u32; NUM_BUCKETS],
         }
     }
 
@@ -110,7 +114,15 @@ impl Histogram {
         &self.buffer
     }
 
-    pub fn dispatch(&self, encoder: &mut CommandEncoder) {
+    pub fn dispatch(&mut self, encoder: &mut CommandEncoder) {
+        if self.read_buffer_mapped.swap(false, Ordering::Acquire) {
+            cast_slice_mut(&mut self.read_buffer_contents).copy_from_slice(&*self.read_buffer.slice(..).get_mapped_range());
+            println!("Got: {:?}", self.read_buffer_contents);
+            self.read_buffer.unmap();
+        } else {
+            println!("No data available");
+        }
+
         encoder.clear_buffer(&self.buffer, 0, None);
 
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
@@ -119,13 +131,15 @@ impl Histogram {
         compute_pass.dispatch_workgroups(self.dispatch_count.x, self.dispatch_count.y, 1);
         drop(compute_pass);
 
-        encoder.copy_buffer_to_buffer(&self.buffer, 0, &self.read_buffer, 0, BUFFER_SIZE as u64)
+        encoder.copy_buffer_to_buffer(&self.buffer, 0, &self.read_buffer, 0, BUFFER_SIZE as u64);
     }
 
-    pub async fn read(&self, buckets: &mut [u32]) {
+    pub fn map(&self) {
         let slice = self.read_buffer.slice(..);
-        slice.map_async(MapMode::Read).await.unwrap();
-        cast_slice_mut(buckets).copy_from_slice(slice.get_mapped_range().as_ref());
-        self.read_buffer.unmap();
+        let mapped_flag = self.read_buffer_mapped.clone();
+        slice.map_async(MapMode::Read, move |result| { 
+            assert!(result.is_ok());
+            mapped_flag.store(true, Ordering::Release);
+        });
     }
 }

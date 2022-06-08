@@ -16,7 +16,7 @@ pub use tonemap::*;
 use wgpu::{
     Buffer, BufferDescriptor, BufferUsages, Device, Extent3d, Queue, TextureAspect,
     TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
-    TextureViewDimension,
+    TextureViewDimension, Maintain,
 };
 
 use crate::Camera;
@@ -88,7 +88,7 @@ impl Renderer {
     }
 
     pub fn draw(
-        &self,
+        &mut self,
         device: &Device,
         queue: &Queue,
         target: &TextureView,
@@ -115,6 +115,9 @@ impl Renderer {
         self.histogram.dispatch(&mut encoder);
         self.tonemap.draw(&mut encoder, target);
         queue.submit([encoder.finish()]);
+
+        self.histogram.map();
+        device.poll(Maintain::Wait);
     }
 }
 
