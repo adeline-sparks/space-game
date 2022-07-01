@@ -17,11 +17,11 @@ pub struct Histogram {
     pipeline: ComputePipeline,
     dispatch_count: Vector2<u32>,
     read_buffer_mapped: Arc<AtomicBool>,
-    read_buffer_contents: [u32; NUM_BUCKETS],
 }
 
 const NUM_BUCKETS: usize = 256;
 const BUFFER_SIZE: usize = size_of::<u32>() * NUM_BUCKETS;
+pub type HistogramBuckets = [u32; NUM_BUCKETS];
 
 impl Histogram {
     pub fn new(device: &Device, hdr_view: &TextureView, hdr_tex_size: Vector2<u32>) -> Histogram {
@@ -106,7 +106,6 @@ impl Histogram {
             pipeline,
             dispatch_count: hdr_tex_size / 16,
             read_buffer_mapped: Arc::new(AtomicBool::new(false)),
-            read_buffer_contents: [0u32; NUM_BUCKETS],
         }
     }
 
@@ -114,15 +113,7 @@ impl Histogram {
         &self.buffer
     }
 
-    pub fn dispatch(&mut self, encoder: &mut CommandEncoder) {
-        if self.read_buffer_mapped.swap(false, Ordering::Acquire) {
-            cast_slice_mut(&mut self.read_buffer_contents).copy_from_slice(&*self.read_buffer.slice(..).get_mapped_range());
-            println!("Got: {:?}", self.read_buffer_contents);
-            self.read_buffer.unmap();
-        } else {
-            println!("No data available");
-        }
-
+    pub fn compute(&mut self, encoder: &mut CommandEncoder) -> Option<HistogramBuckets> {
         encoder.clear_buffer(&self.buffer, 0, None);
 
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
@@ -132,6 +123,13 @@ impl Histogram {
         drop(compute_pass);
 
         encoder.copy_buffer_to_buffer(&self.buffer, 0, &self.read_buffer, 0, BUFFER_SIZE as u64);
+  
+        self.read_buffer_mapped.swap(false, Ordering::Acquire).then(|| {
+            let mut buf = [0u32; NUM_BUCKETS];
+            cast_slice_mut(&mut buf).copy_from_slice(&*self.read_buffer.slice(..).get_mapped_range());
+            self.read_buffer.unmap();
+            buf
+        })
     }
 
     pub fn map(&self) {

@@ -112,7 +112,7 @@ impl Renderer {
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         self.galaxy.draw(&mut encoder, &self.hdr_view);
-        self.histogram.dispatch(&mut encoder);
+        dbg!(self.histogram.compute(&mut encoder).is_some());
         self.tonemap.draw(&mut encoder, target);
         queue.submit([encoder.finish()]);
 
