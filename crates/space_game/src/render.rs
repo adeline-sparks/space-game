@@ -17,7 +17,7 @@ pub use tonemap::*;
 use wgpu::{
     Buffer, BufferDescriptor, BufferUsages, Device, Extent3d, Queue, TextureAspect,
     TextureDescriptor, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
-    TextureViewDimension, Maintain,
+    TextureViewDimension,
 };
 
 use crate::Camera;
@@ -95,11 +95,9 @@ impl Renderer {
         target: &TextureView,
         view: &Isometry3<f64>,
     ) {
-        let mut ctr = 0;
         self.histogram.with_buckets(|_| {
-            ctr += 1;
+            // TODO
         });
-        dbg!(ctr);
 
         let projection = Perspective3::new(
             self.target_size.x as f64 / self.target_size.y as f64,
@@ -119,11 +117,11 @@ impl Renderer {
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         self.galaxy.draw(&mut encoder, &self.hdr_view);
-        self.histogram.compute(&mut encoder);
+        self.histogram.encode(&mut encoder);
         self.tonemap.draw(&mut encoder, target);
 
         queue.submit([encoder.finish()]);
-        self.histogram.map_async();
+        self.histogram.map_buffers();
     }
 }
 
