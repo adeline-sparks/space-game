@@ -8,7 +8,7 @@ space_game_core = { path = '../space_game_core' }
 
 # Graphics/Rendering
 winit = '0.26.1'
-wgpu = { version='0.13', features = ['webgl'] }
+wgpu = { version = '0.13', features = ['webgl'] }
 
 # Math/Physics
 nalgebra = { version = '0.30', features = ['bytemuck'] }

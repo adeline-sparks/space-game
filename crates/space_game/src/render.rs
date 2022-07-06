@@ -73,9 +73,9 @@ impl Renderer {
 
         let galaxy = GalaxyBox::new(device, queue, &camera_buffer, hdr_format).await?;
 
-        let histogram = Histogram::new(device, &hdr_view, target_size);
+        let histogram = Histogram::new(device, &hdr_view, target_size, 256, 0.0001, 1.0);
 
-        let tonemap = Tonemap::new(device, &hdr_view, histogram.buffer(), target_format);
+        let tonemap = Tonemap::new(device, &hdr_view, histogram.buckets_buffer(), target_format);
 
         Ok(Renderer {
             camera_buffer,
@@ -94,6 +94,12 @@ impl Renderer {
         target: &TextureView,
         view: &Isometry3<f64>,
     ) {
+        // TODO make a pool of readback buffers.
+        device.poll(Maintain::Wait);
+        self.histogram.with_buckets(|buckets| {
+            dbg!(buckets[128]);
+        });
+
         let projection = Perspective3::new(
             self.target_size.x as f64 / self.target_size.y as f64,
             (60.0f64).to_radians(),
@@ -112,12 +118,12 @@ impl Renderer {
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         self.galaxy.draw(&mut encoder, &self.hdr_view);
-        dbg!(self.histogram.compute(&mut encoder).is_some());
+        self.histogram.compute(&mut encoder);
         self.tonemap.draw(&mut encoder, target);
-        queue.submit([encoder.finish()]);
 
-        self.histogram.map();
-        device.poll(Maintain::Wait);
+        self.histogram.unmap();
+        queue.submit([encoder.finish()]);
+        self.histogram.map_async();
     }
 }
 
