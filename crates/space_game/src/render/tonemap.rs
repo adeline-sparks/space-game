@@ -93,7 +93,7 @@ impl Tonemap {
             ],
         });
 
-        let module = device.create_shader_module(&include_wgsl!("tonemap.wgsl"));
+        let module = device.create_shader_module(include_wgsl!("tonemap.wgsl"));
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[&bindgroup_layout],
@@ -113,11 +113,11 @@ impl Tonemap {
             fragment: Some(FragmentState {
                 module: &module,
                 entry_point: "frag_main",
-                targets: &[ColorTargetState {
+                targets: &[Some(ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
-                }],
+                })],
             }),
             multiview: None,
         });
@@ -138,7 +138,7 @@ impl Tonemap {
     pub fn draw(&self, encoder: &mut CommandEncoder, target: &TextureView) {
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: None,
-            color_attachments: &[RenderPassColorAttachment {
+            color_attachments: &[Some(RenderPassColorAttachment {
                 view: target,
                 resolve_target: None,
                 ops: Operations {
@@ -150,7 +150,7 @@ impl Tonemap {
                     }),
                     store: true,
                 },
-            }],
+            })],
             depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&self.pipeline);

@@ -163,7 +163,7 @@ async fn init_wgpu(
     let size = window.inner_size();
     let surface_config = SurfaceConfiguration {
         usage: TextureUsages::RENDER_ATTACHMENT,
-        format: surface.get_preferred_format(&adapter).unwrap(),
+        format: *surface.get_supported_formats(&adapter).get(0).unwrap(),
         width: size.width,
         height: size.height,
         present_mode: PresentMode::Fifo,
