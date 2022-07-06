@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::{atomic::{AtomicBool, Ordering}, Arc}, num::NonZeroU64, slice};
+use std::{mem::size_of, num::NonZeroU64, slice};
 
 use bytemuck::{cast_slice, Pod, Zeroable};
 use nalgebra::Vector2;
@@ -7,8 +7,10 @@ use wgpu::{
     BindGroupLayoutEntry, BindingType, Buffer, BufferBinding, BufferBindingType, BufferDescriptor,
     BufferUsages, CommandEncoder, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, Device, PipelineLayoutDescriptor, ShaderStages, TextureSampleType,
-    TextureView, TextureViewDimension, MapMode, util::DeviceExt,
+    TextureView, TextureViewDimension, util::DeviceExt,
 };
+
+use super::queue::DownloadQueue;
 
 /// GPU compute shader for computing a histogram over a texture.
 pub struct Histogram {
@@ -16,10 +18,8 @@ pub struct Histogram {
     num_buckets: usize,
     /// Buffer storing an array of buckets. Each bucket is a u32.
     buckets_buffer: Buffer,
-    /// Readback buffer for reading the buckets buffer on the CPU.
-    buckets_read_buffer: Buffer,
-    /// Flag which indicates whether `buckets_mappable` is currently mapped.
-    buckets_read_buffer_mapped: Arc<AtomicBool>,
+    /// TODO
+    buckets_download_queue: DownloadQueue,
     /// BindGroup to use with the pipeline.
     bind_group: BindGroup,
     /// ComputePipeline for executing the histogram shader.
@@ -27,7 +27,6 @@ pub struct Histogram {
     /// The number of dispatches needed to cover the input texture.
     dispatch_count: Vector2<u32>,
 }
-
 
 /// Uniform variables for the Histogram compute shader.
 #[derive(Copy, Clone, Pod, Zeroable, Default, Debug)]
@@ -123,17 +122,6 @@ impl Histogram {
             mapped_at_creation: false,
         });
 
-        // Create a buffer to read back the histogram buckets on the CPU.
-        let buckets_read_buffer = device.create_buffer(&BufferDescriptor { 
-            label: None, 
-            size: buckets_buffer_size as u64, 
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST, 
-            mapped_at_creation: false,
-        });
-
-        // Allocate a flag which tracks whether the read buffer is mapped. This is set in a wgpu callback, and so must be thread-safe.
-        let buckets_read_buffer_mapped = Arc::new(AtomicBool::new(false));
-
         // Create the bind_group using all our buffers.
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: None,
@@ -165,8 +153,7 @@ impl Histogram {
         Histogram {
             num_buckets,
             buckets_buffer,
-            buckets_read_buffer,
-            buckets_read_buffer_mapped,
+            buckets_download_queue: DownloadQueue::new(device, buckets_buffer_size, 3),
             bind_group,
             pipeline,
             dispatch_count: hdr_view_size / 16,
@@ -179,12 +166,18 @@ impl Histogram {
     }
 
     /// If the readback buffer is mapped, invoke callback with a slice containing the buckets.
-    pub fn with_buckets<T>(&self, f: impl FnOnce(&[u32]) -> T) -> Option<T> {
-        self.buckets_read_buffer_mapped.load(Ordering::Acquire).then(|| {
-            let buckets_read_view = self.buckets_read_buffer.slice(..).get_mapped_range();
-            let buckets_read: &[u32] = cast_slice(&*buckets_read_view);
-            f(buckets_read)
-        })
+    pub fn with_buckets(&mut self, mut f: impl FnMut(&[u32])) {
+        loop {
+            if self.buckets_download_queue.mapped_buffer_view().is_some() {
+                let view = self.buckets_download_queue.mapped_buffer_view().unwrap();
+                f(cast_slice(&*view));
+                drop(view);
+                self.buckets_download_queue.unmap_buffer();
+                continue;
+            }
+
+            break;
+        }
     }
 
     /// Encode the histogram computation into the `CommandEncoder`.
@@ -198,27 +191,15 @@ impl Histogram {
         drop(compute_pass);
 
         let copy_size = self.num_buckets * size_of::<u32>();
-        encoder.copy_buffer_to_buffer(&self.buckets_buffer, 0, &self.buckets_read_buffer, 0, copy_size as u64);
-    }
-
-    /// Unmap the readback buffer if it is mapped. The readback buffer must be unmapped before issuing commands to the device `Queue`.
-    pub fn unmap(&self) {
-        if self.buckets_read_buffer_mapped.swap(false, Ordering::Acquire) {
-            self.buckets_read_buffer.unmap();
+        if let Some(download_buffer) = self.buckets_download_queue.active_buffer() {
+            encoder.copy_buffer_to_buffer(&self.buckets_buffer, 0, download_buffer, 0, copy_size as u64);
+        } else {
+            println!("Download queue full");
         }
     }
 
     /// Request to map the readback buffer as soon as it is available. This should be called immediately after issuing commands to the device, so that the readback buffer is mapped by the time we render the next frame.
-    pub fn map_async(&self) {
-        // Get another Arc to the mapped flag for use in the callback.
-        let mapped = self.buckets_read_buffer_mapped.clone();
-        self.buckets_read_buffer
-            .slice(..)
-            .map_async(MapMode::Read, move |result| {
-                assert!(result.is_ok());
-
-                // map_async completed, so set the mapped flag.
-                mapped.store(true, Ordering::Release);
-            });
+    pub fn map_async(&mut self) {
+        self.buckets_download_queue.map_active_buffer();
     }
 }

@@ -1,4 +1,5 @@
 mod galaxy;
+mod queue;
 use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::slice;
@@ -94,11 +95,11 @@ impl Renderer {
         target: &TextureView,
         view: &Isometry3<f64>,
     ) {
-        // TODO make a pool of readback buffers.
-        device.poll(Maintain::Wait);
-        self.histogram.with_buckets(|buckets| {
-            dbg!(buckets[128]);
+        let mut ctr = 0;
+        self.histogram.with_buckets(|_| {
+            ctr += 1;
         });
+        dbg!(ctr);
 
         let projection = Perspective3::new(
             self.target_size.x as f64 / self.target_size.y as f64,
@@ -121,7 +122,6 @@ impl Renderer {
         self.histogram.compute(&mut encoder);
         self.tonemap.draw(&mut encoder, target);
 
-        self.histogram.unmap();
         queue.submit([encoder.finish()]);
         self.histogram.map_async();
     }
