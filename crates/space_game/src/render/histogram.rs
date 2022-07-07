@@ -13,7 +13,7 @@ use wgpu::{
     TextureView, TextureViewDimension,
 };
 
-use super::queue::DownloadQueue;
+use super::StagingBuffer;
 
 /// GPU compute shader for computing a histogram over a texture.
 pub struct Histogram {
@@ -22,7 +22,7 @@ pub struct Histogram {
     /// Buffer storing an array of buckets. Each bucket is a u32.
     buckets_buffer: Buffer,
     /// DownloadQueue for downloading the buckets from the GPU.
-    buckets_download_queue: DownloadQueue,
+    buckets_staging_buffer: StagingBuffer,
     /// BindGroup to use with the pipeline.
     bind_group: BindGroup,
     /// ComputePipeline for executing the histogram shader.
@@ -133,6 +133,8 @@ impl Histogram {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
+        
+        let buckets_staging_buffer = StagingBuffer::new_read(device, buckets_buffer_size);
 
         // Create the bind_group using all our buffers.
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
@@ -165,7 +167,7 @@ impl Histogram {
         Histogram {
             num_buckets,
             buckets_buffer,
-            buckets_download_queue: DownloadQueue::new(device, buckets_buffer_size, 3),
+            buckets_staging_buffer,
             bind_group,
             pipeline,
             dispatch_count: hdr_view_size / 16,
@@ -178,11 +180,16 @@ impl Histogram {
         &self.buckets_buffer
     }
 
-    /// Invoke callback with a slice containing the latest set of buckets to be downloaded from the GPU.
-    /// Callback may be invoked multiple times if multiple downloads have completed since the last call.
-    pub fn with_buckets(&mut self, mut f: impl FnMut(&[u32])) {
-        self.buckets_download_queue
-            .pop_all(|view| f(cast_slice(&*view)));
+    /// TODO
+    pub fn with_buckets<T>(&mut self, f: impl FnOnce(&[u32]) -> T) -> Option<T> {
+        let result = {
+            let view = self.buckets_staging_buffer.try_view()?;
+            f(cast_slice(&*view))
+        };
+
+        self.buckets_staging_buffer.unmap();
+
+        Some(result)
     }
 
     /// Encode the histogram computation into the `CommandEncoder`.
@@ -196,11 +203,11 @@ impl Histogram {
         drop(compute_pass);
 
         let copy_size = self.num_buckets * size_of::<u32>();
-        if let Some(write_buffer) = self.buckets_download_queue.try_write_buffer() {
+        if let Some(buffer) = self.buckets_staging_buffer.try_buffer() {
             encoder.copy_buffer_to_buffer(
                 &self.buckets_buffer,
                 0,
-                write_buffer,
+                buffer,
                 0,
                 copy_size as u64,
             );
@@ -211,6 +218,6 @@ impl Histogram {
     /// immediately after issuing commands to the device, so that the readback buffer is mapped
     /// by the time we render the next frame.
     pub fn map_buffers(&mut self) {
-        self.buckets_download_queue.push_write_buffer();
+        self.buckets_staging_buffer.map_async();
     }
 }

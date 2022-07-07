@@ -1,10 +1,13 @@
-mod galaxy;
-mod queue;
 use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::slice;
 
 use bytemuck::cast_slice;
+
+mod buffer;
+pub use buffer::*;
+
+mod galaxy;
 pub use galaxy::*;
 
 mod histogram;
@@ -95,9 +98,12 @@ impl Renderer {
         target: &TextureView,
         view: &Isometry3<f64>,
     ) {
-        self.histogram.with_buckets(|_| {
-            // TODO
+        let ok = self.histogram.with_buckets(|buf| {
+            dbg!(buf[128]);
         });
+        if ok.is_none() {
+            println!("No histogram data");
+        }
 
         let projection = Perspective3::new(
             self.target_size.x as f64 / self.target_size.y as f64,
